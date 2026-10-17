@@ -1,0 +1,91 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: swarmengine_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-swarm_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-SwarmSecurePass2026!}
+      POSTGRES_DB: ${POSTGRES_DB:-swarmengine50}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-swarm_admin} -d ${POSTGRES_DB:-swarmengine50}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: swarmengine_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 150M
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: swarmengine_core
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-swarm_admin}:${POSTGRES_PASSWORD:-SwarmSecurePass2026!}@db:5432/${POSTGRES_DB:-swarmengine50}
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:-swarmengine50-super-secret-signing-key-change-in-prod-2026}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-SwarmAdmin2026!}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      ADMIN_TELEGRAM_CHAT_ID: ${ADMIN_TELEGRAM_CHAT_ID:-}
+      EVOLUTION_API_URL: ${EVOLUTION_API_URL:-http://host.docker.internal:8080}
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
+      BASE_SHORTLINK_DOMAIN: ${BASE_SHORTLINK_DOMAIN:-http://localhost:8000}
+      MERCADOLIBRE_COUNTRY_SITE: ${MERCADOLIBRE_COUNTRY_SITE:-MCO}
+      MERCADOLIBRE_AFFILIATE_MATT_TOOL: ${MERCADOLIBRE_AFFILIATE_MATT_TOOL:-matt_tool_swarm50}
+      AMAZON_PARTNER_TAG: ${AMAZON_PARTNER_TAG:-swarm50-20}
+      ALIEXPRESS_TRACKING_ID: ${ALIEXPRESS_TRACKING_ID:-swarm50_ali}
+      DAILY_GLOBAL_BUDGET_USD: ${DAILY_GLOBAL_BUDGET_USD:-1.50}
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - ./static:/app/static
+      - ./credentials:/app/credentials:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 640M
+
+volumes:
+  pgdata:
+  redisdata:

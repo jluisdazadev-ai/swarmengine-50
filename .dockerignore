@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.venv
+venv
+static/cards/*.jpg
+credentials/*.json
+.pytest_cache
+.mypy_cache

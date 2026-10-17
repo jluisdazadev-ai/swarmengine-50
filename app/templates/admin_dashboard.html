@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Control | SwarmEngine 50</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
+    <header class="border-b border-slate-800 bg-slate-900 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500 text-slate-950 font-black">S50</span>
+                <div>
+                    <h1 class="font-extrabold text-base sm:text-lg text-white">SwarmEngine 50 — Command Center</h1>
+                    <p class="text-xs text-slate-400">{{ active_bots_count }} / {{ total_clones }} Micro-Bots Activos</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="/" target="_blank" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700">Ver Portal pSEO ↗</a>
+                <form action="/admin/logout" method="post">
+                    <button type="submit" class="text-xs px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 font-semibold">
+                        Cerrar Sesión
+                    </button>
+                </form>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {% if flash_msg %}
+        <div class="p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-sm font-medium">
+            ✅ {{ flash_msg }}
+        </div>
+        {% endif %}
+
+        <!-- KPIs Financieros y de Tráfico -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                <p class="text-xs text-slate-400">Micro-Bots Activos</p>
+                <p class="text-2xl font-black text-emerald-400 mt-1">{{ active_bots_count }} <span class="text-sm font-normal text-slate-500">/ {{ total_clones }}</span></p>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                <p class="text-xs text-slate-400">Ofertas Publicadas Hoy</p>
+                <p class="text-2xl font-black text-white mt-1">{{ global_offers_today }} <span class="text-xs font-normal text-slate-500">({{ total_offers_db }} total)</span></p>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                <p class="text-xs text-slate-400">Clics Acumulados (/go/)</p>
+                <p class="text-2xl font-black text-sky-400 mt-1">{{ global_clicks }}</p>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                <p class="text-xs text-slate-400">Gasto Gemini Hoy / Límite</p>
+                <p class="text-2xl font-black text-amber-400 mt-1">${{ "%.4f"|format(global_ai_cost_today) }} <span class="text-xs font-normal text-slate-500">/ ${{ "%.2f"|format(sys_settings.daily_global_budget_usd) }}</span></p>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                <p class="text-xs text-slate-400">Comisiones Confirmadas</p>
+                <p class="text-2xl font-black text-emerald-400 mt-1">${{ "%.2f"|format(global_commissions_total) }} USD</p>
+            </div>
+        </section>
+
+        <!-- Gráfica Chart.js + Acciones de Enjambre -->
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div class="lg:col-span-8 bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                <h2 class="text-base font-bold text-white mb-4">Top 10 Micro-Bots por Clics y Comisiones (USD)</h2>
+                <div class="h-64">
+                    <canvas id="swarmMetricsChart"></canvas>
+                </div>
+            </div>
+
+            <div class="lg:col-span-4 bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between space-y-4">
+                <div>
+                    <h2 class="text-base font-bold text-white mb-2">🧬 Expansión y Motor Darwiniano</h2>
+                    <p class="text-xs text-slate-400 leading-relaxed mb-4">
+                        Genera nuevos lotes de 10 micro-nichos con Gemini 2.5 Flash o ejecuta la poda Darwiniana (desactiva bots con &lt;10 clics y $0 comisiones tras 30 días y clona a los Top 5 ganadores).
+                    </p>
+                    <form action="/admin/clones/generate-batch" method="post" class="space-y-3 mb-4">
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Tamaño del nuevo lote (Gemini 2.5 Flash)</label>
+                            <input type="number" name="batch_size" value="10" min="1" max="20" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                        </div>
+                        <button type="submit" class="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition">
+                            ✨ Generar Nuevo Lote con Gemini 2.5 Flash
+                        </button>
+                    </form>
+                </div>
+
+                <div class="pt-4 border-t border-slate-800">
+                    <button
+                        hx-post="/admin/darwin/run"
+                        hx-target="#darwin-result"
+                        hx-swap="innerHTML"
+                        class="w-full py-2.5 px-4 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold text-xs transition">
+                        🧬 Ejecutar Ciclo Darwiniano Ahora
+                    </button>
+                    <div id="darwin-result" class="mt-2 text-xs text-slate-400 font-mono break-all"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tabla de los 50 Micro-Bots -->
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+            <div class="p-6 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h2 class="text-lg font-bold text-white">🤖 Flota de {{ total_clones }} Micro-Bots Especializados</h2>
+                    <p class="text-xs text-slate-400">Control individual en 1 clic con HTMX y telemetría financiera en tiempo real.</p>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-800 bg-slate-950/60 text-xs uppercase text-slate-400">
+                            <th class="py-3.5 px-4">Código / Nicho</th>
+                            <th class="py-3.5 px-4">Canal / Reglas</th>
+                            <th class="py-3.5 px-4">Estado</th>
+                            <th class="py-3.5 px-4 text-right">Ofertas Hoy</th>
+                            <th class="py-3.5 px-4 text-right">Clics Acum.</th>
+                            <th class="py-3.5 px-4 text-right">Gasto Gemini USD</th>
+                            <th class="py-3.5 px-4 text-right">Comisiones USD</th>
+                            <th class="py-3.5 px-4 text-center">Acción 1-Clic</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/70">
+                        {% for row in clone_table %}
+                        {% set clone = row.clone %}
+                        <tr class="hover:bg-slate-800/40 transition">
+                            <td class="py-3.5 px-4">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-mono text-xs font-bold text-emerald-400">{{ clone.clone_code }}</span>
+                                    <a href="/c/{{ clone.pseo_category_slug }}" target="_blank" class="font-semibold text-white hover:text-emerald-400">
+                                        {{ clone.niche_name }}
+                                    </a>
+                                </div>
+                                <p class="text-xs text-slate-500 mt-0.5">Sub-ID: {{ clone.affiliate_sub_id }}</p>
+                            </td>
+                            <td class="py-3.5 px-4 text-xs text-slate-300">
+                                <div>{{ clone.telegram_channel_id }}</div>
+                                <div class="text-slate-500">Mín. -{{ clone.min_discount_percent }}% | {{ clone.country_site }}</div>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                <div id="clone-status-{{ clone.id }}" class="flex items-center gap-2">
+                                    {% if clone.is_active %}
+                                    <span class="px-2.5 py-1 text-xs font-semibold rounded-full border bg-emerald-500/20 text-emerald-400 border-emerald-500/40">ACTIVO</span>
+                                    <button hx-post="/admin/clones/{{ clone.id }}/toggle" hx-target="#clone-status-{{ clone.id }}" hx-swap="outerHTML" class="px-2.5 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700">Pausar</button>
+                                    {% else %}
+                                    <span class="px-2.5 py-1 text-xs font-semibold rounded-full border bg-rose-500/20 text-rose-400 border-rose-500/40">PAUSADO</span>
+                                    <button hx-post="/admin/clones/{{ clone.id }}/toggle" hx-target="#clone-status-{{ clone.id }}" hx-swap="outerHTML" class="px-2.5 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700">Activar</button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td class="py-3.5 px-4 text-right font-mono text-slate-200">
+                                {{ row.offers_today }} <span class="text-xs text-slate-500">({{ row.total_offers }})</span>
+                            </td>
+                            <td class="py-3.5 px-4 text-right font-mono font-bold text-sky-400">
+                                {{ row.total_clicks }}
+                            </td>
+                            <td class="py-3.5 px-4 text-right font-mono text-amber-300">
+                                ${{ "%.5f"|format(row.ai_cost_total_usd) }}
+                            </td>
+                            <td class="py-3.5 px-4 text-right font-mono font-bold text-emerald-400">
+                                ${{ "%.2f"|format(row.commissions_usd) }}
+                            </td>
+                            <td class="py-3.5 px-4 text-center">
+                                <div id="run-btn-{{ clone.id }}">
+                                    <button
+                                        hx-post="/admin/clones/{{ clone.id }}/run"
+                                        hx-target="#run-btn-{{ clone.id }}"
+                                        hx-swap="innerHTML"
+                                        class="px-3 py-1.5 text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg transition">
+                                        ▶ Ejecutar Ahora
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Configuración Global SystemSettings -->
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 class="text-lg font-bold text-white mb-4">⚙️ Configuración Global en Caliente (`SystemSettings`)</h2>
+            <form action="/admin/settings" method="post" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Gemini API Key</label>
+                    <input type="password" name="gemini_api_key" placeholder="Dejar en blanco para conservar actual" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Telegram Bot Token</label>
+                    <input type="password" name="telegram_bot_token" placeholder="Dejar en blanco para conservar actual" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Admin Telegram Chat ID</label>
+                    <input type="text" name="admin_telegram_chat_id" value="{{ sys_settings.admin_telegram_chat_id }}" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Evolution API URL (WhatsApp)</label>
+                    <input type="text" name="evolution_api_url" value="{{ sys_settings.evolution_api_url }}" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Evolution API Key</label>
+                    <input type="password" name="evolution_api_key" placeholder="Dejar en blanco para conservar actual" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Dominio Base Shortlink & pSEO</label>
+                    <input type="text" name="base_shortlink_domain" value="{{ sys_settings.base_shortlink_domain }}" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Sitio MercadoLibre (MCO, MLM, MLA, MLC)</label>
+                    <input type="text" name="mercadolibre_country_site" value="{{ sys_settings.mercadolibre_country_site }}" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">MercadoLibre Affiliate matt_tool</label>
+                    <input type="text" name="mercadolibre_affiliate_matt_tool" value="{{ sys_settings.mercadolibre_affiliate_matt_tool }}" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Amazon Partner Tag</label>
+                    <input type="text" name="amazon_partner_tag" value="{{ sys_settings.amazon_partner_tag }}" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">AliExpress Tracking ID</label>
+                    <input type="text" name="aliexpress_tracking_id" value="{{ sys_settings.aliexpress_tracking_id }}" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Presupuesto Diario Global Gemini (USD)</label>
+                    <input type="number" step="0.05" name="daily_global_budget_usd" value="{{ sys_settings.daily_global_budget_usd }}" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div class="flex items-end">
+                    <button type="submit" class="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm transition">
+                        💾 Guardar Configuración Global
+                    </button>
+                </div>
+            </form>
+        </section>
+    </main>
+
+    <script>
+        const ctx = document.getElementById('swarmMetricsChart');
+        if (ctx) {
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: {{ chart_labels|tojson }},
+                    datasets: [
+                        {
+                            label: 'Clics Acumulados',
+                            data: {{ chart_clicks|tojson }},
+                            backgroundColor: 'rgba(56, 189, 248, 0.7)',
+                            borderColor: 'rgb(56, 189, 248)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Comisiones Confirmadas (USD)',
+                            data: {{ chart_commissions|tojson }},
+                            backgroundColor: 'rgba(16, 185, 129, 0.7)',
+                            borderColor: 'rgb(16, 185, 129)',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: 'rgba(51, 65, 85, 0.4)' }, ticks: { color: '#94a3b8' } },
+                        x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#e2e8f0' } }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>

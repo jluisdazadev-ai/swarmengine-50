@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}SwarmEngine 50 | Directorio de {{ total_clones }} Micro-Nichos y Ofertas en Tiempo Real{% endblock %}
+
+{% block content %}
+<section class="mb-10 bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/40 border border-slate-800 rounded-2xl p-6 sm:p-8">
+    <div class="max-w-3xl">
+        <span class="inline-block text-xs font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 rounded-full mb-3">
+            Monitoreo Automático 24/7
+        </span>
+        <h1 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mb-3">
+            {{ total_clones }} Micro-Bots Cazando Descuentos Reales Verificados
+        </h1>
+        <p class="text-slate-300 text-base leading-relaxed">
+            Filtramos repuestos, cajas vacías y precios inflados. Solo publicamos productos nuevos con descuento real comprobado y acceso directo a nuestros canales especializados de Telegram y WhatsApp.
+        </p>
+    </div>
+</section>
+
+{% if latest_offers %}
+<section class="mb-12">
+    <div class="flex items-center justify-between mb-5">
+        <h2 class="text-xl font-bold text-white">🔥 Últimas Ofertas Detectadas</h2>
+        <span class="text-xs text-slate-400">Mostrando {{ latest_offers|length }} chollos recientes</span>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for offer in latest_offers %}
+        <article class="bg-slate-900 border border-slate-800 hover:border-emerald-500/50 rounded-xl overflow-hidden flex flex-col transition">
+            <div class="relative bg-white p-4 h-56 flex items-center justify-center">
+                <img src="{{ offer.image_url }}" alt="{{ offer.title }}" loading="lazy" class="max-h-full max-w-full object-contain">
+                <span class="absolute top-3 right-3 bg-rose-600 text-white text-xs font-extrabold px-2.5 py-1 rounded-full shadow">
+                    -{{ offer.discount_percent|round|int }}% OFF
+                </span>
+                <a href="/c/{{ offer.clone.pseo_category_slug }}" class="absolute bottom-2 left-2 bg-slate-900/90 text-slate-200 text-[11px] px-2.5 py-0.5 rounded border border-slate-700">
+                    {{ offer.clone.niche_name }}
+                </a>
+            </div>
+            <div class="p-5 flex-1 flex flex-col justify-between">
+                <div>
+                    <h3 class="font-bold text-slate-100 text-base line-clamp-2 mb-2">
+                        <a href="/oferta/{{ offer.short_code }}-{{ slugify_offer(offer.title) }}" class="hover:text-emerald-400">
+                            {{ offer.title }}
+                        </a>
+                    </h3>
+                    <div class="flex items-baseline gap-2 mb-4">
+                        <span class="text-2xl font-extrabold text-emerald-400">{{ format_currency(offer.sale_price, offer.currency) }}</span>
+                        <span class="text-xs text-slate-500 line-through">{{ format_currency(offer.original_price, offer.currency) }}</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 pt-3 border-t border-slate-800">
+                    <a href="/oferta/{{ offer.short_code }}-{{ slugify_offer(offer.title) }}" class="flex-1 text-center text-xs font-semibold py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200">
+                        Ver Análisis IA
+                    </a>
+                    <a href="/go/{{ offer.short_code }}" target="_blank" rel="nofollow noopener" class="flex-1 text-center text-xs font-bold py-2 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950">
+                        Comprar Oferta ↗
+                    </a>
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+<section>
+    <div class="flex items-center justify-between mb-5">
+        <h2 class="text-xl font-bold text-white">📂 Directorio de los {{ total_clones }} Micro-Nichos Especializados</h2>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for item in categories %}
+        <a href="/c/{{ item.clone.pseo_category_slug }}" class="group p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-emerald-500/60 transition flex items-start justify-between gap-3">
+            <div>
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">{{ item.clone.clone_code }}</span>
+                    <span class="text-xs text-slate-400">Descuento mín. -{{ item.clone.min_discount_percent }}%</span>
+                </div>
+                <h3 class="font-bold text-slate-100 group-hover:text-emerald-400 transition">{{ item.clone.niche_name }}</h3>
+                <p class="text-xs text-slate-400 mt-1">Canal: {{ item.clone.telegram_channel_id }}</p>
+            </div>
+            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                {{ item.offers_count }} ofertas
+            </span>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

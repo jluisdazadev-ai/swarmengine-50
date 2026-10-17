@@ -1,0 +1,28 @@
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+credentials/*.json
+!credentials/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Imágenes generadas en tiempo de ejecución
+static/cards/*.jpg
+static/cards/*.png
+!static/cards/.gitkeep
+
+# Sistema Operativo / IDE
+.DS_Store
+.vscode/
+.idea/
+*.swp

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SwarmEngine 50 | Radar de Ofertas Verificadas en Tiempo Real{% endblock %}</title>
+    <meta name="description" content="{% block meta_description %}Cazador autónomo de descuentos reales verificados en 50 micro-nichos especializados de tecnología, herramientas, hogar y deporte.{% endblock %}">
+    {% block canonical %}{% endblock %}
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+    {% block head_extra %}{% endblock %}
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased">
+    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-3">
+                <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500 text-slate-950 font-black text-lg">S50</span>
+                <div>
+                    <span class="font-extrabold text-lg tracking-tight text-white">SwarmEngine <span class="text-emerald-400">50</span></span>
+                    <span class="hidden sm:inline-block ml-2 text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">Radar pSEO en Vivo</span>
+                </div>
+            </a>
+            <form action="/" method="get" class="flex-1 max-w-md mx-4">
+                <div class="relative">
+                    <input
+                        type="search"
+                        name="q"
+                        value="{{ search_query|default('') }}"
+                        placeholder="Buscar producto, marca o micro-nicho..."
+                        class="w-full bg-slate-950 border border-slate-800 rounded-lg pl-4 pr-10 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-emerald-500"
+                    >
+                    <button type="submit" class="absolute right-2.5 top-1.5 text-slate-400 hover:text-emerald-400 text-sm font-semibold">Ir</button>
+                </div>
+            </form>
+            <div class="flex items-center gap-3">
+                <a href="/sitemap.xml" class="text-xs text-slate-400 hover:text-slate-200 hidden md:inline">Sitemap XML</a>
+                <a href="/admin" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium">Panel Admin</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="border-t border-slate-900 bg-slate-950 py-8 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-4">
+            <p>© 2026 SwarmEngine 50 — Red de 50 Micro-Bots Autónomos de Ofertas Verificadas y pSEO.</p>
+            <p>Precios y disponibilidad verificados en tiempo real. Enlaces de afiliado con atribución directa.</p>
+        </div>
+    </footer>
+</body>
+</html>

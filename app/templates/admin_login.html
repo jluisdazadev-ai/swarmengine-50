@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acceso Administrativo | SwarmEngine 50</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
+        <div class="flex items-center gap-3 mb-6">
+            <span class="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500 text-slate-950 font-black text-xl">S50</span>
+            <div>
+                <h1 class="text-xl font-extrabold text-white">SwarmEngine 50</h1>
+                <p class="text-xs text-slate-400">Centro de Comando del Enjambre de 50 Bots</p>
+            </div>
+        </div>
+
+        {% if error %}
+        <div class="mb-4 p-3 rounded-lg bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs font-medium">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <form action="/admin/login" method="post" class="space-y-4">
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1">Usuario Administrador</label>
+                <input type="text" name="username" required autofocus class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1">Contraseña</label>
+                <input type="password" name="password" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500">
+            </div>
+            <button type="submit" class="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm transition">
+                Ingresar al Panel de Control
+            </button>
+        </form>
+    </div>
+</body>
+</html>

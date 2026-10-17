@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Ofertas en {{ clone.niche_name }} (Hasta -{{ clone.min_discount_percent }}% OFF) | SwarmEngine 50{% endblock %}
+{% block meta_description %}Descuentos reales verificados en {{ clone.niche_name }}. Monitoreo automático con mínimo {{ clone.min_discount_percent }}% de rebaja comprobada.{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ canonical_url }}">{% endblock %}
+
+{% block content %}
+<nav class="text-xs text-slate-400 mb-4">
+    <a href="/" class="hover:text-emerald-400">Inicio</a>
+    <span class="mx-2">/</span>
+    <span class="text-slate-200">{{ clone.niche_name }}</span>
+</nav>
+
+<section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 mb-8 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+    <div>
+        <div class="flex items-center gap-2 mb-2">
+            <span class="text-xs font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded">{{ clone.clone_code }}</span>
+            <span class="text-xs text-slate-400">Umbral exigido: Mínimo -{{ clone.min_discount_percent }}% OFF</span>
+        </div>
+        <h1 class="text-2xl sm:text-3xl font-extrabold text-white mb-2">{{ clone.niche_name }}</h1>
+        <p class="text-sm text-slate-300 max-w-2xl">{{ clone.persona_prompt_style }}</p>
+        <div class="flex flex-wrap gap-1.5 mt-4">
+            {% for kw in clone.search_keywords %}
+            <span class="text-xs bg-slate-950 border border-slate-800 text-slate-300 px-2.5 py-1 rounded-md">{{ kw }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="flex flex-col sm:flex-row lg:flex-col gap-3 shrink-0">
+        {% if telegram_url %}
+        <a href="{{ telegram_url }}" target="_blank" rel="noopener" class="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-sm shadow-lg">
+            ✈️ Unirse al Canal Telegram ({{ clone.telegram_channel_id }})
+        </a>
+        {% endif %}
+        <div class="text-xs text-slate-400 text-center">
+            Alertas instantáneas apenas baja el precio
+        </div>
+    </div>
+</section>
+
+{% if offers %}
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+    {% for offer in offers %}
+    <article class="bg-slate-900 border border-slate-800 hover:border-emerald-500/50 rounded-xl overflow-hidden flex flex-col">
+        <div class="relative bg-white p-4 h-56 flex items-center justify-center">
+            <img src="{{ offer.image_url }}" alt="{{ offer.title }}" loading="lazy" class="max-h-full max-w-full object-contain">
+            <span class="absolute top-3 right-3 bg-rose-600 text-white text-xs font-extrabold px-2.5 py-1 rounded-full">
+                -{{ offer.discount_percent|round|int }}% OFF
+            </span>
+        </div>
+        <div class="p-5 flex-1 flex flex-col justify-between">
+            <div>
+                <h2 class="font-bold text-slate-100 text-base line-clamp-2 mb-2">
+                    <a href="/oferta/{{ offer.short_code }}-{{ slugify_offer(offer.title) }}" class="hover:text-emerald-400">
+                        {{ offer.title }}
+                    </a>
+                </h2>
+                <div class="flex items-baseline gap-2 mb-4">
+                    <span class="text-2xl font-extrabold text-emerald-400">{{ format_currency(offer.sale_price, offer.currency) }}</span>
+                    <span class="text-xs text-slate-500 line-through">{{ format_currency(offer.original_price, offer.currency) }}</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 pt-3 border-t border-slate-800">
+                <a href="/oferta/{{ offer.short_code }}-{{ slugify_offer(offer.title) }}" class="flex-1 text-center text-xs font-semibold py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200">
+                    Reseña Completa
+                </a>
+                <a href="/go/{{ offer.short_code }}" target="_blank" rel="nofollow noopener" class="flex-1 text-center text-xs font-bold py-2 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950">
+                    Ver Oferta ↗
+                </a>
+            </div>
+        </div>
+    </article>
+    {% endfor %}
+</div>
+{% else %}
+<div class="bg-slate-900 border border-slate-800 rounded-xl p-10 text-center">
+    <p class="text-slate-300 font-semibold mb-1">El micro-bot {{ clone.clone_code }} está escaneando ofertas en este momento.</p>
+    <p class="text-xs text-slate-500">Suscríbete al canal {{ clone.telegram_channel_id }} para recibir la primera alerta verificada.</p>
+</div>
+{% endif %}
+{% endblock %}
