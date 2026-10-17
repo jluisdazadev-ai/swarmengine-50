@@ -15,7 +15,7 @@
                 <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500 text-slate-950 font-black">S50</span>
                 <div>
                     <h1 class="font-extrabold text-base sm:text-lg text-white">SwarmEngine 50 — Command Center</h1>
-                    <p class="text-xs text-slate-400">{{ active_bots_count }} / {{ total_clones }} Micro-Bots Activos</p>
+                    <p class="text-xs text-slate-400">{{ active_bots_count }} / {{ total_clones }} Micro-Bots Activos | Modo: <span class="text-emerald-400 font-bold">{{ sys_settings.preferred_marketplace_mode }}</span></p>
                 </div>
             </div>
             <div class="flex items-center gap-3">
@@ -58,6 +58,76 @@
                 <p class="text-xs text-slate-400">Comisiones Confirmadas</p>
                 <p class="text-2xl font-black text-emerald-400 mt-1">${{ "%.2f"|format(global_commissions_total) }} USD</p>
             </div>
+        </section>
+
+        <!-- GESTOR RÁPIDO DE HOTMART (ESPECIAL COLOMBIA / LATAM EN DÓLARES) -->
+        <section class="bg-gradient-to-br from-slate-900 via-slate-900 to-orange-950/30 border border-orange-500/30 rounded-2xl p-6">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
+                <div>
+                    <span class="inline-block text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30 mb-1">
+                        🔥 Especial Colombia & Latam (Comisiones 40% - 80% en USD)
+                    </span>
+                    <h2 class="text-lg font-extrabold text-white">Cargar HotLink de Hotmart o Enlace de Oferta Directa</h2>
+                    <p class="text-xs text-slate-300 mt-0.5">
+                        Pega tu enlace <code class="text-orange-300">https://go.hotmart.com/TU_CODIGO</code>. El sistema inyecta automáticamente <code class="text-emerald-400">?src=swarm-bot-XX</code>, extrae foto/título reales si los dejas vacíos, redacta la reseña con Gemini 2.5 Flash y genera la tarjeta 1080x1080.
+                    </p>
+                </div>
+                <div class="bg-slate-950/90 border border-slate-800 rounded-xl px-4 py-2.5 text-xs shrink-0">
+                    <div class="text-slate-400">Webhook Postback Automático de Ventas Hotmart:</div>
+                    <code class="text-emerald-400 font-mono select-all">{{ sys_settings.base_shortlink_domain }}/webhooks/hotmart</code>
+                </div>
+            </div>
+
+            <form action="/admin/hotmart/add" method="post" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-xs text-slate-300 font-semibold mb-1">1. Seleccionar Micro-Bot / Nicho</label>
+                    <select name="clone_id" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                        {% for row in clone_table %}
+                        <option value="{{ row.clone.id }}">{{ row.clone.clone_code }} — {{ row.clone.niche_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-xs text-slate-300 font-semibold mb-1">2. Tu HotLink de Hotmart (`https://go.hotmart.com/...`)</label>
+                    <input type="url" name="hotlink_url" required placeholder="https://go.hotmart.com/X12345678Y" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-300 font-semibold mb-1">Cupón Descuento (Opcional)</label>
+                    <input type="text" name="coupon_code" placeholder="Ej. 031016 (50% OFF)" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-xs text-slate-400 mb-1">Título del Producto (Opcional: se extrae solo si lo dejas vacío)</label>
+                    <input type="text" name="title" placeholder="Dejar vacío para extraer automáticamente de la página..." class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-xs text-slate-400 mb-1">URL de Imagen (Opcional: se extrae `og:image` sola si la dejas vacía)</label>
+                    <input type="url" name="image_url" placeholder="Dejar vacío para extraer automáticamente..." class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Precio Normal Antes</label>
+                    <input type="number" step="0.01" name="original_price" value="99.00" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Precio Oferta Hoy</label>
+                    <input type="number" step="0.01" name="sale_price" value="49.00" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Moneda</label>
+                    <select name="currency" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                        <option value="USD" selected>USD (Dólares)</option>
+                        <option value="COP">COP (Pesos Colombianos)</option>
+                    </select>
+                </div>
+                <div class="flex flex-col justify-end gap-2">
+                    <label class="inline-flex items-center gap-2 text-xs text-slate-200 cursor-pointer">
+                        <input type="checkbox" name="publish_now" checked class="rounded bg-slate-900 border-slate-700 text-emerald-500">
+                        <span>Redactar con IA y publicar ahora mismo</span>
+                    </label>
+                    <button type="submit" class="w-full py-2.5 px-4 rounded-xl bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-xs transition shadow-lg">
+                        🔥 Importar HotLink y Publicar Oferta
+                    </button>
+                </div>
+            </form>
         </section>
 
         <!-- Gráfica Chart.js + Acciones de Enjambre -->
@@ -132,7 +202,7 @@
                                         {{ clone.niche_name }}
                                     </a>
                                 </div>
-                                <p class="text-xs text-slate-500 mt-0.5">Sub-ID: {{ clone.affiliate_sub_id }}</p>
+                                <p class="text-xs text-slate-500 mt-0.5">Hotmart `src`: {{ clone.affiliate_sub_id }}</p>
                             </td>
                             <td class="py-3.5 px-4 text-xs text-slate-300">
                                 <div>{{ clone.telegram_channel_id }}</div>
@@ -184,6 +254,18 @@
             <h2 class="text-lg font-bold text-white mb-4">⚙️ Configuración Global en Caliente (`SystemSettings`)</h2>
             <form action="/admin/settings" method="post" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
+                    <label class="block text-xs text-slate-400 mb-1">Modo de Marketplace Preferido</label>
+                    <select name="preferred_marketplace_mode" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                        <option value="HYBRID" {% if sys_settings.preferred_marketplace_mode == 'HYBRID' %}selected{% endif %}>HYBRID (Hotmart + Tiendas Físicas)</option>
+                        <option value="HOTMART" {% if sys_settings.preferred_marketplace_mode == 'HOTMART' %}selected{% endif %}>SOLO HOTMART (100% Infoproductos USD)</option>
+                        <option value="MERCADOLIBRE" {% if sys_settings.preferred_marketplace_mode == 'MERCADOLIBRE' %}selected{% endif %}>MERCADOLIBRE</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Hotmart Webhook Hottok (`X-Hotmart-Hottok`)</label>
+                    <input type="password" name="hotmart_hottok" placeholder="Dejar en blanco para conservar actual" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
                     <label class="block text-xs text-slate-400 mb-1">Gemini API Key</label>
                     <input type="password" name="gemini_api_key" placeholder="Dejar en blanco para conservar actual" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
                 </div>
@@ -216,10 +298,6 @@
                     <input type="text" name="mercadolibre_affiliate_matt_tool" value="{{ sys_settings.mercadolibre_affiliate_matt_tool }}" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
                 </div>
                 <div>
-                    <label class="block text-xs text-slate-400 mb-1">Amazon Partner Tag</label>
-                    <input type="text" name="amazon_partner_tag" value="{{ sys_settings.amazon_partner_tag }}" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
-                </div>
-                <div>
                     <label class="block text-xs text-slate-400 mb-1">AliExpress Tracking ID</label>
                     <input type="text" name="aliexpress_tracking_id" value="{{ sys_settings.aliexpress_tracking_id }}" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
                 </div>
@@ -227,8 +305,8 @@
                     <label class="block text-xs text-slate-400 mb-1">Presupuesto Diario Global Gemini (USD)</label>
                     <input type="number" step="0.05" name="daily_global_budget_usd" value="{{ sys_settings.daily_global_budget_usd }}" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
                 </div>
-                <div class="flex items-end">
-                    <button type="submit" class="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm transition">
+                <div class="sm:col-span-2 lg:col-span-3 flex justify-end">
+                    <button type="submit" class="py-2.5 px-6 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm transition">
                         💾 Guardar Configuración Global
                     </button>
                 </div>

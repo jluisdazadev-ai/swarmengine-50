@@ -24,8 +24,9 @@ from app.database import Base
 
 
 class MarketplaceEnum(str, enum.Enum):
-    """Marketplaces soportados por el cosechador multi-tienda."""
+    """Marketplaces soportados por el cosechador multi-tienda (incluyendo Hotmart)."""
 
+    HOTMART = "HOTMART"
     MERCADOLIBRE = "MERCADOLIBRE"
     AMAZON = "AMAZON"
     ALIEXPRESS = "ALIEXPRESS"
@@ -45,6 +46,11 @@ class SystemSettings(Base):
     base_shortlink_domain: Mapped[str] = mapped_column(
         String(255), nullable=False, default="https://ofertas.veloz.digital"
     )
+    preferred_marketplace_mode: Mapped[str] = mapped_column(String(30), nullable=False, default="HYBRID")
+    hotmart_hottok: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    hotmart_client_id: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    hotmart_client_secret: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    hotmart_basic_auth: Mapped[str] = mapped_column(String(512), nullable=False, default="")
     mercadolibre_country_site: Mapped[str] = mapped_column(String(10), nullable=False, default="MCO")
     mercadolibre_affiliate_matt_tool: Mapped[str] = mapped_column(String(120), nullable=False, default="")
     amazon_partner_tag: Mapped[str] = mapped_column(String(120), nullable=False, default="")
@@ -92,6 +98,41 @@ class BotClone(Base):
     daily_metrics: Mapped[List["DailyCloneMetrics"]] = relationship(
         "DailyCloneMetrics", back_populates="clone", cascade="all, delete-orphan"
     )
+    hotmart_items: Mapped[List["HotmartProductPool"]] = relationship(
+        "HotmartProductPool", back_populates="clone", cascade="all, delete-orphan"
+    )
+
+
+class HotmartProductPool(Base):
+    """
+    Catálogo de productos de Hotmart (o infoproductos/ofertas directas con HotLink `go.hotmart.com/...`)
+    asignados a los Micro-Bots para rotación automática, redacción con Gemini y publicación pSEO.
+    """
+
+    __tablename__ = "hotmart_product_pool"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    clone_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("bot_clones.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    external_item_id: Mapped[str] = mapped_column(String(120), unique=True, nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    hotlink_url: Mapped[str] = mapped_column(Text, nullable=False)
+    image_url: Mapped[str] = mapped_column(Text, nullable=False)
+    original_price: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, default=Decimal("99.00"))
+    sale_price: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, default=Decimal("49.00"))
+    discount_percent: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, default=Decimal("50.00"))
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default="USD")
+    coupon_code: Mapped[str] = mapped_column(String(60), nullable=False, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+    )
+
+    clone: Mapped["BotClone"] = relationship("BotClone", back_populates="hotmart_items")
 
 
 class ProductOffer(Base):
@@ -111,13 +152,13 @@ class ProductOffer(Base):
     source_marketplace: Mapped[MarketplaceEnum] = mapped_column(
         SqlEnum(MarketplaceEnum, name="marketplace_enum", native_enum=False),
         nullable=False,
-        default=MarketplaceEnum.MERCADOLIBRE,
+        default=MarketplaceEnum.HOTMART,
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     original_price: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     sale_price: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     discount_percent: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
-    currency: Mapped[str] = mapped_column(String(10), nullable=False, default="COP")
+    currency: Mapped[str] = mapped_column(String(10), nullable=False, default="USD")
     raw_product_url: Mapped[str] = mapped_column(Text, nullable=False)
     affiliate_full_url: Mapped[str] = mapped_column(Text, nullable=False)
     short_code: Mapped[str] = mapped_column(String(16), unique=True, nullable=False, index=True)

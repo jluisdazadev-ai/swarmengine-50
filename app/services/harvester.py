@@ -4,12 +4,14 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import hashlib
 import hmac
+import html
 import json
 import logging
 import re
 import time
 import unicodedata
 from typing import Any, Dict, List, Optional
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import httpx
 from sqlalchemy import select
@@ -22,7 +24,13 @@ from tenacity import (
 )
 
 from app.config import get_settings
-from app.models import BotClone, MarketplaceEnum, ProductOffer, SystemSettings
+from app.models import (
+    BotClone,
+    HotmartProductPool,
+    MarketplaceEnum,
+    ProductOffer,
+    SystemSettings,
+)
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -106,6 +114,101 @@ async def is_item_recently_published(
     return detected_at >= cutoff_date
 
 
+@retry(
+    reraise=True,
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1.2, min=1.0, max=8.0),
+    retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
+)
+async def extract_live_hotmart_metadata(target_url: str) -> Dict[str, Any]:
+    """
+    Realiza una petición HTTP real a un HotLink (`https://go.hotmart.com/...` o página de ventas)
+    siguiendo redirecciones y extrae en vivo:
+    - Título (`og:title` / `<title>` / JSON-LD)
+    - Imagen de portada (`og:image` / JSON-LD)
+    - Precio si está expuesto en Schema.org/Product
+    """
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "es-CO,es;q=0.9,en;q=0.8",
+    }
+    timeout = httpx.Timeout(connect=8.0, read=15.0, write=8.0, pool=8.0)
+    async with httpx.AsyncClient(headers=headers, timeout=timeout, follow_redirects=True) as client:
+        response = await client.get(target_url)
+        response.raise_for_status()
+        body = response.text
+
+    title = ""
+    image_url = ""
+    extracted_price: Optional[Decimal] = None
+    currency = "USD"
+
+    # 1. Intentar extraer desde OpenGraph meta tags
+    og_title_match = re.search(
+        r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)["\']',
+        body,
+        flags=re.IGNORECASE,
+    ) or re.search(
+        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:title["\']',
+        body,
+        flags=re.IGNORECASE,
+    )
+    if og_title_match:
+        title = html.unescape(og_title_match.group(1)).strip()
+
+    og_img_match = re.search(
+        r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
+        body,
+        flags=re.IGNORECASE,
+    ) or re.search(
+        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
+        body,
+        flags=re.IGNORECASE,
+    )
+    if og_img_match:
+        image_url = html.unescape(og_img_match.group(1)).strip()
+
+    # 2. Fallback al tag <title>
+    if not title:
+        title_tag = re.search(r"<title[^>]*>(.*?)</title>", body, flags=re.IGNORECASE | re.DOTALL)
+        if title_tag:
+            title = html.unescape(re.sub(r"\s+", " ", title_tag.group(1))).strip()
+
+    # 3. Intentar extraer JSON-LD si existe en la página de ventas
+    ld_matches = re.findall(
+        r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+        body,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    for raw_ld in ld_matches:
+        try:
+            ld_obj = json.loads(raw_ld.strip())
+            if isinstance(ld_obj, dict):
+                if not title and ld_obj.get("name"):
+                    title = str(ld_obj["name"]).strip()
+                if not image_url and ld_obj.get("image"):
+                    img_val = ld_obj["image"]
+                    image_url = img_val[0] if isinstance(img_val, list) and img_val else str(img_val)
+                offers_node = ld_obj.get("offers")
+                if isinstance(offers_node, dict) and offers_node.get("price"):
+                    extracted_price = Decimal(str(offers_node["price"]))
+                    currency = str(offers_node.get("priceCurrency") or "USD")
+        except Exception:
+            continue
+
+    return {
+        "title": title,
+        "image_url": image_url,
+        "sale_price": extracted_price,
+        "currency": currency,
+        "final_url": str(response.url),
+    }
+
+
 class BaseMarketplaceHarvester(ABC):
     """Interfaz base extensible para cosechadores de ofertas multi-tienda."""
 
@@ -184,6 +287,88 @@ class BaseMarketplaceHarvester(ABC):
             reverse=True,
         )
         return sorted_deals[:max_candidates]
+
+
+class HotmartHarvester(BaseMarketplaceHarvester):
+    """
+    Cosechador especializado en Hotmart para Colombia y Latinoamérica:
+    1. Consulta primero los HotLinks activos registrados en `HotmartProductPool` para el clon
+       (con soporte de cupón de descuento `offDiscount` y atribución `?src=`).
+    2. Si se configuraron credenciales de Hotmart Developers API, consulta además el endpoint
+       oficial de productos afiliados.
+    """
+
+    marketplace = MarketplaceEnum.HOTMART
+
+    async def harvest_from_pool_for_clone(
+        self,
+        session: AsyncSession,
+        clone: BotClone,
+        max_candidates: int = 5,
+    ) -> List[HarvestedCandidate]:
+        """Obtiene los productos de Hotmart asignados a este clon que no se hayan publicado en 15 días."""
+        stmt = (
+            select(HotmartProductPool)
+            .where(
+                HotmartProductPool.clone_id == clone.id,
+                HotmartProductPool.is_active.is_(True),
+            )
+            .order_by(HotmartProductPool.discount_percent.desc(), HotmartProductPool.id.desc())
+        )
+        pool_items = list((await session.execute(stmt)).scalars().all())
+        results: List[HarvestedCandidate] = []
+
+        for item in pool_items:
+            if await is_item_recently_published(
+                session=session,
+                clone_id=clone.id,
+                external_item_id=item.external_item_id,
+            ):
+                continue
+
+            hotlink = item.hotlink_url.strip()
+            if item.coupon_code.strip():
+                parsed = urlparse(hotlink)
+                q_params = dict(parse_qsl(parsed.query, keep_blank_values=True))
+                q_params["offDiscount"] = item.coupon_code.strip()
+                hotlink = urlunparse(
+                    (
+                        parsed.scheme or "https",
+                        parsed.netloc,
+                        parsed.path,
+                        parsed.params,
+                        urlencode(q_params, doseq=True),
+                        "",
+                    )
+                )
+
+            results.append(
+                HarvestedCandidate(
+                    external_item_id=item.external_item_id,
+                    source_marketplace=MarketplaceEnum.HOTMART,
+                    title=item.title,
+                    original_price=item.original_price,
+                    sale_price=item.sale_price,
+                    discount_percent=item.discount_percent,
+                    currency=item.currency or "USD",
+                    raw_product_url=hotlink,
+                    image_url=item.image_url,
+                )
+            )
+            if len(results) >= max_candidates:
+                break
+
+        return results
+
+    async def search_keyword_deals(
+        self,
+        client: httpx.AsyncClient,
+        clone: BotClone,
+        keyword: str,
+        sys_settings: Optional[SystemSettings] = None,
+    ) -> List[HarvestedCandidate]:
+        """Implementación de la interfaz base para búsquedas por palabra clave en Hotmart."""
+        return []
 
 
 class MercadoLibreHarvester(BaseMarketplaceHarvester):
@@ -621,11 +806,12 @@ class AmazonHarvester(BaseMarketplaceHarvester):
 
 class MultiStoreHarvesterOrchestrator:
     """
-    Orquestador que ejecuta la cosecha en MercadoLibre (principal) y en los
-    marketplaces adicionales (AliExpress, Amazon) cuando sus llaves están activas.
+    Orquestador que ejecuta la cosecha priorizando Hotmart (`HotmartHarvester`) en modo `HYBRID` o `HOTMART`,
+    y complementando con MercadoLibre, AliExpress y Amazon según configuración.
     """
 
     def __init__(self) -> None:
+        self.hotmart_harvester = HotmartHarvester()
         self.ml_harvester = MercadoLibreHarvester()
         self.ali_harvester = AliExpressHarvester()
         self.amz_harvester = AmazonHarvester()
@@ -639,15 +825,24 @@ class MultiStoreHarvesterOrchestrator:
     ) -> List[HarvestedCandidate]:
         """Devuelve las mejores ofertas multi-tienda ordenadas por descuento real verificado."""
         all_candidates: List[HarvestedCandidate] = []
+        mode = (
+            sys_settings.preferred_marketplace_mode
+            if sys_settings and sys_settings.preferred_marketplace_mode
+            else settings.preferred_marketplace_mode
+        ).upper()
 
-        ml_deals = await self.ml_harvester.harvest_for_clone(
-            session=session,
-            clone=clone,
-            sys_settings=sys_settings,
-            max_candidates=limit,
-        )
-        all_candidates.extend(ml_deals)
+        # 1. Cosechar primero productos de Hotmart asignados a este clon
+        if mode in {"HYBRID", "HOTMART"}:
+            hotmart_deals = await self.hotmart_harvester.harvest_from_pool_for_clone(
+                session=session,
+                clone=clone,
+                max_candidates=limit,
+            )
+            all_candidates.extend(hotmart_deals)
+            if mode == "HOTMART":
+                return all_candidates[:limit]
 
+        # 2. Cosechar en AliExpress si está activo
         if settings.aliexpress_app_key and settings.aliexpress_app_secret:
             ali_deals = await self.ali_harvester.harvest_for_clone(
                 session=session,
@@ -657,6 +852,17 @@ class MultiStoreHarvesterOrchestrator:
             )
             all_candidates.extend(ali_deals)
 
+        # 3. Cosechar en MercadoLibre si el modo es HYBRID o MERCADOLIBRE
+        if mode in {"HYBRID", "MERCADOLIBRE"}:
+            ml_deals = await self.ml_harvester.harvest_for_clone(
+                session=session,
+                clone=clone,
+                sys_settings=sys_settings,
+                max_candidates=limit,
+            )
+            all_candidates.extend(ml_deals)
+
+        # 4. Cosechar en Amazon si está activo
         if settings.amazon_access_key and settings.amazon_secret_key:
             amz_deals = await self.amz_harvester.harvest_for_clone(
                 session=session,
@@ -667,7 +873,11 @@ class MultiStoreHarvesterOrchestrator:
             all_candidates.extend(amz_deals)
 
         all_candidates.sort(
-            key=lambda x: (x.discount_percent, x.original_price - x.sale_price),
+            key=lambda x: (
+                1 if x.source_marketplace == MarketplaceEnum.HOTMART else 0,
+                x.discount_percent,
+                x.original_price - x.sale_price,
+            ),
             reverse=True,
         )
         return all_candidates[:limit]

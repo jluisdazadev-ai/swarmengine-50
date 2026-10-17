@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+import hashlib
 import hmac
 import logging
 from typing import Any, Dict, List, Optional
@@ -8,15 +9,17 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Re
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeTimedSerializer
-from sqlalchemy import func, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.config import BASE_DIR, get_settings
 from app.database import get_db_session
-from app.models import BotClone, DailyCloneMetrics, ProductOffer
+from app.models import BotClone, DailyCloneMetrics, HotmartProductPool, ProductOffer
 from app.scheduler import execute_clone_pipeline, schedule_single_clone_job
 from app.services.darwin import run_darwinian_evolution_cycle
+from app.services.harvester import extract_live_hotmart_metadata
 from app.services.seeder import ensure_system_settings, generate_new_clone_batch_with_gemini
 
 logger = logging.getLogger(__name__)
@@ -103,6 +106,7 @@ async def admin_dashboard_view(
     Dashboard Administrativo principal en `/admin`:
     - Tabla de los 50 clones con estado (Activo/Pausado), ofertas publicadas hoy,
       clics acumulados, gasto en Gemini USD, comisiones registradas y botones de acción en 1 clic.
+    - Gestor de HotLinks de Hotmart con extracción automática de metadatos en vivo.
     - Métricas financieras globales y gráficas Chart.js.
     """
     if not is_admin_authenticated(request):
@@ -111,12 +115,10 @@ async def admin_dashboard_view(
     sys_settings = await ensure_system_settings(session)
     today = date.today()
 
-    # Métricas de hoy por clon
     today_stmt = select(DailyCloneMetrics).where(DailyCloneMetrics.date == today)
     today_rows = list((await session.execute(today_stmt)).scalars().all())
     today_by_clone: Dict[int, DailyCloneMetrics] = {m.clone_id: m for m in today_rows}
 
-    # Métricas históricas acumuladas por clon
     agg_stmt = (
         select(
             BotClone,
@@ -173,7 +175,6 @@ async def admin_dashboard_view(
             }
         )
 
-    # Top 10 clones por clics para el gráfico Chart.js
     top_chart_clones = sorted(clone_table, key=lambda x: x["total_clicks"], reverse=True)[:10]
     chart_labels = [item["clone"].clone_code for item in top_chart_clones]
     chart_clicks = [item["total_clicks"] for item in top_chart_clones]
@@ -181,12 +182,21 @@ async def admin_dashboard_view(
 
     total_offers_db = (await session.execute(select(func.count(ProductOffer.id)))).scalar_one() or 0
 
+    hotmart_stmt = (
+        select(HotmartProductPool)
+        .options(selectinload(HotmartProductPool.clone))
+        .order_by(desc(HotmartProductPool.id))
+        .limit(20)
+    )
+    hotmart_items = list((await session.execute(hotmart_stmt)).scalars().all())
+
     return templates.TemplateResponse(
         request=request,
         name="admin_dashboard.html",
         context={
             "sys_settings": sys_settings,
             "clone_table": clone_table,
+            "hotmart_items": hotmart_items,
             "total_clones": len(clone_table),
             "active_bots_count": active_bots_count,
             "global_clicks": global_clicks,
@@ -200,6 +210,107 @@ async def admin_dashboard_view(
             "chart_commissions": chart_commissions,
             "flash_msg": msg,
         },
+    )
+
+
+@router.post("/hotmart/add")
+async def add_hotmart_product_to_pool(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    clone_id: int = Form(...),
+    hotlink_url: str = Form(...),
+    title: str = Form(""),
+    image_url: str = Form(""),
+    original_price: float = Form(99.0),
+    sale_price: float = Form(49.0),
+    currency: str = Form("USD"),
+    coupon_code: str = Form(""),
+    publish_now: Optional[str] = Form(None),
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """
+    Agrega un HotLink de Hotmart (`https://go.hotmart.com/...` o página de oferta) al pool de un Micro-Bot.
+    Si el usuario deja el título o la imagen en blanco, extrae los datos reales en vivo desde la página de Hotmart.
+    Si marca `publish_now`, dispara de inmediato la redacción con Gemini 2.5 Flash y la publicación.
+    """
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    clean_hotlink = hotlink_url.strip()
+    final_title = title.strip()
+    final_image = image_url.strip()
+
+    if not final_title or not final_image:
+        try:
+            meta = await extract_live_hotmart_metadata(clean_hotlink)
+            if not final_title and meta.get("title"):
+                final_title = str(meta["title"])
+            if not final_image and meta.get("image_url"):
+                final_image = str(meta["image_url"])
+        except Exception as exc:
+            logger.warning("No se pudo extraer metadata automática de %s: %s", clean_hotlink, exc)
+
+    if not final_title:
+        final_title = "Programa Completo Certificado con Descuento Especial"
+    if not final_image:
+        final_image = "https://static-media.hotmart.com/img/hotmart-logo-share.png"
+
+    orig_dec = Decimal(str(max(1.0, round(original_price, 2))))
+    sale_dec = Decimal(str(max(0.5, round(sale_price, 2))))
+    if orig_dec <= sale_dec:
+        orig_dec = (sale_dec * Decimal("2.0")).quantize(Decimal("0.01"))
+
+    disc_float = round(float(((orig_dec - sale_dec) / orig_dec) * Decimal("100")), 1)
+    disc_dec = Decimal(str(disc_float))
+
+    url_hash = hashlib.sha1(clean_hotlink.encode("utf-8")).hexdigest()[:10].upper()
+    external_id = f"HOT_{url_hash}"
+
+    existing = (
+        await session.execute(
+            select(HotmartProductPool).where(HotmartProductPool.external_item_id == external_id).limit(1)
+        )
+    ).scalar_one_or_none()
+
+    if existing is None:
+        pool_entry = HotmartProductPool(
+            clone_id=clone_id,
+            external_item_id=external_id,
+            title=final_title[:500],
+            hotlink_url=clean_hotlink,
+            image_url=final_image,
+            original_price=orig_dec,
+            sale_price=sale_dec,
+            discount_percent=disc_dec,
+            currency=currency.strip().upper() or "USD",
+            coupon_code=coupon_code.strip(),
+            is_active=True,
+        )
+        session.add(pool_entry)
+    else:
+        existing.clone_id = clone_id
+        existing.title = final_title[:500]
+        existing.hotlink_url = clean_hotlink
+        existing.image_url = final_image
+        existing.original_price = orig_dec
+        existing.sale_price = sale_dec
+        existing.discount_percent = disc_dec
+        existing.currency = currency.strip().upper() or "USD"
+        existing.coupon_code = coupon_code.strip()
+        existing.is_active = True
+
+    await session.commit()
+
+    if publish_now == "on":
+        background_tasks.add_task(execute_clone_pipeline, clone_id, True)
+        return RedirectResponse(
+            url="/admin?msg=Producto+Hotmart+guardado+y+publicandose+con+Gemini+2.5+Flash",
+            status_code=302,
+        )
+
+    return RedirectResponse(
+        url="/admin?msg=Producto+Hotmart+agregado+al+pool+correctamente",
+        status_code=302,
     )
 
 
@@ -325,6 +436,8 @@ async def update_system_settings(
     evolution_api_url: str = Form(""),
     evolution_api_key: str = Form(""),
     base_shortlink_domain: str = Form(""),
+    preferred_marketplace_mode: str = Form("HYBRID"),
+    hotmart_hottok: str = Form(""),
     mercadolibre_country_site: str = Form("MCO"),
     mercadolibre_affiliate_matt_tool: str = Form(""),
     amazon_partner_tag: str = Form(""),
@@ -348,6 +461,9 @@ async def update_system_settings(
         sys_settings.evolution_api_key = evolution_api_key.strip()
     if base_shortlink_domain.strip():
         sys_settings.base_shortlink_domain = base_shortlink_domain.strip()
+    sys_settings.preferred_marketplace_mode = preferred_marketplace_mode.strip().upper() or "HYBRID"
+    if hotmart_hottok.strip():
+        sys_settings.hotmart_hottok = hotmart_hottok.strip()
     sys_settings.mercadolibre_country_site = mercadolibre_country_site.strip().upper() or "MCO"
     sys_settings.mercadolibre_affiliate_matt_tool = mercadolibre_affiliate_matt_tool.strip()
     sys_settings.amazon_partner_tag = amazon_partner_tag.strip()

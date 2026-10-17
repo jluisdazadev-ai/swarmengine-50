@@ -13,7 +13,7 @@ from app.database import (
     init_database,
     redis_client,
 )
-from app.routers import dashboard, pseo, redirect
+from app.routers import dashboard, pseo, redirect, webhooks
 from app.scheduler import swarm_scheduler, sync_all_clone_jobs_in_scheduler
 from app.services.darwin import schedule_darwinian_monthly_job
 from app.services.seeder import seed_initial_clones
@@ -34,7 +34,7 @@ settings.static_cards_dir.mkdir(parents=True, exist_ok=True)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Ciclo de vida de producción de SwarmEngine 50:
-    1. Crea o verifica las tablas en PostgreSQL 16.
+    1. Crea o verifica las tablas en PostgreSQL 16 (incluyendo soporte Hotmart).
     2. Siembra automáticamente los 50 Micro-Bots iniciales y SystemSettings si no existen.
     3. Registra en APScheduler los 50 trabajos escalonados con Jitter y el ciclo mensual Darwiniano.
     4. Arranca el planificador asíncrono en segundo plano.
@@ -62,13 +62,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(
-    title="SwarmEngine 50: Plataforma de Enjambre de 50 Micro-Bots de Afiliados y pSEO",
+    title="SwarmEngine 50: Plataforma de Enjambre de 50 Micro-Bots de Afiliados (Hotmart + Multi-Tienda) y pSEO",
     description=(
-        "Sistema autónomo de cosecha multi-tienda, redacción estructurada con Gemini 2.5 Flash, "
-        "tarjetas promocionales 1080x1080 con Pillow, publicación en Telegram/WhatsApp, "
-        "portal pSEO con JSON-LD y Motor Darwiniano de Auto-Poda."
+        "Sistema autónomo de cosecha híbrida (Hotmart + MercadoLibre + AliExpress + Amazon), "
+        "redacción estructurada con Gemini 2.5 Flash, tarjetas promocionales 1080x1080 con Pillow, "
+        "publicación en Telegram/WhatsApp, portal pSEO con JSON-LD y Motor Darwiniano de Auto-Poda."
     ),
-    version="1.0.0",
+    version="1.1.0",
     lifespan=lifespan,
 )
 
@@ -103,6 +103,7 @@ async def healthcheck() -> Dict[str, object]:
 
 
 # Registro de routers en orden de especificidad de rutas
+app.include_router(webhooks.router)
 app.include_router(redirect.router)
 app.include_router(dashboard.router)
 app.include_router(pseo.router)

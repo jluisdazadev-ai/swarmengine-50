@@ -29,7 +29,8 @@ def build_affiliate_url(
 ) -> str:
     """
     Construye el enlace de afiliado real inyectando los parámetros de atribución oficiales
-    de cada marketplace junto con el `clone.affiliate_sub_id` para trazabilidad por micro-bot.
+    de cada marketplace (Hotmart `?src=&sck=`, MercadoLibre, Amazon, AliExpress)
+    junto con el `clone.affiliate_sub_id` para trazabilidad exacta por micro-bot.
     """
     parsed = urlparse(raw_url.strip())
     query_params = dict(parse_qsl(parsed.query, keep_blank_values=True))
@@ -50,7 +51,12 @@ def build_affiliate_url(
         else settings.aliexpress_tracking_id
     )
 
-    if marketplace == MarketplaceEnum.MERCADOLIBRE:
+    if marketplace == MarketplaceEnum.HOTMART or "hotmart.com" in parsed.netloc.lower():
+        # Parámetros oficiales de atribución de Hotmart (src y sck llegan en el Webhook Postback)
+        query_params["src"] = clone.affiliate_sub_id
+        query_params["sck"] = clone.clone_code
+
+    elif marketplace == MarketplaceEnum.MERCADOLIBRE:
         if matt_tool:
             query_params["matt_tool"] = matt_tool
         if settings.mercadolibre_affiliate_matt_word:
@@ -82,7 +88,7 @@ def build_affiliate_url(
             parsed.path,
             parsed.params,
             encoded_query,
-            "",  # Limpiar fragmentos # para evitar conflictos con trackers de afiliado
+            "",
         )
     )
     return rebuilt_url

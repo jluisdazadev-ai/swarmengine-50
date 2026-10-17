@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 import logging
 
 import redis.asyncio as aioredis
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -75,12 +76,22 @@ async def get_db_context() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_database() -> None:
-    """Inicializa las tablas del esquema en PostgreSQL si no existen."""
+    """Inicializa las tablas del esquema en PostgreSQL y aplica migraciones ligeras para columnas de Hotmart."""
     import app.models  # noqa: F401 - Asegura que todos los modelos estén registrados en Base.metadata
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    logger.info("Esquema de base de datos PostgreSQL verificado e inicializado correctamente.")
+        migration_statements = [
+            "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS preferred_marketplace_mode VARCHAR(30) NOT NULL DEFAULT 'HYBRID'",
+            "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS hotmart_hottok VARCHAR(255) NOT NULL DEFAULT ''",
+            "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS hotmart_client_id VARCHAR(255) NOT NULL DEFAULT ''",
+            "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS hotmart_client_secret VARCHAR(255) NOT NULL DEFAULT ''",
+            "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS hotmart_basic_auth VARCHAR(512) NOT NULL DEFAULT ''",
+        ]
+        for sql in migration_statements:
+            await conn.execute(text(sql))
+
+    logger.info("Esquema de base de datos PostgreSQL (con soporte Hotmart) verificado e inicializado correctamente.")
 
 
 async def close_database_connections() -> None:

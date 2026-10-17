@@ -63,7 +63,22 @@ class Settings(BaseSettings):
         description="Dominio público base para enlaces cortos /go/{short_code} y portal pSEO",
     )
 
-    # Parámetros de Marketplaces y Afiliados
+    # Modo de Marketplace Preferido (HYBRID, HOTMART, MERCADOLIBRE, ALIEXPRESS)
+    preferred_marketplace_mode: str = Field(
+        default="HYBRID",
+        description="Prioridad de cosecha: HYBRID (Hotmart + Tiendas), HOTMART, MERCADOLIBRE o ALIEXPRESS",
+    )
+
+    # Parámetros de Hotmart (Ideal para Colombia y Latinoamérica en USD)
+    hotmart_hottok: str = Field(
+        default="",
+        description="Token Hottok de seguridad para el Webhook de ventas de Hotmart (/webhooks/hotmart)",
+    )
+    hotmart_client_id: str = Field(default="", description="Client ID de Hotmart Developers API")
+    hotmart_client_secret: str = Field(default="", description="Client Secret de Hotmart Developers API")
+    hotmart_basic_auth: str = Field(default="", description="Basic Auth de Hotmart Developers API")
+
+    # Parámetros de Marketplaces Físicos
     mercadolibre_country_site: str = Field(default="MCO", description="Sitio de MercadoLibre por defecto (MCO, MLM, MLA, MLC)")
     mercadolibre_affiliate_matt_tool: str = Field(default="matt_tool_swarm50", description="Parámetro matt_tool de afiliado MercadoLibre")
     mercadolibre_affiliate_matt_word: str = Field(default="swarmengine", description="Parámetro matt_word de afiliado MercadoLibre")
