@@ -314,6 +314,59 @@ async def add_hotmart_product_to_pool(
     )
 
 
+@router.post("/hotmart/bulk-auto-assign")
+async def admin_bulk_auto_assign_hotlinks(
+    request: Request,
+    raw_urls_text: str = Form(...),
+    default_coupon: str = Form(""),
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """
+    Recibe múltiples enlaces de Hotmart en bloque sin elegir nicho;
+    extrae título, foto y precio de cada uno y usa Gemini 2.5 Flash para asignarlos
+    automáticamente a los Micro-Bots (`bot_01` a `bot_50`) más afines.
+    """
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    from app.services.hotmart_sync import bulk_auto_assign_hotlinks_with_ai
+
+    assigned = await bulk_auto_assign_hotlinks_with_ai(
+        session=session,
+        raw_urls_text=raw_urls_text,
+        default_coupon=default_coupon,
+    )
+    return RedirectResponse(
+        url=f"/admin?msg=IA+asigno+automaticamente+{len(assigned)}+productos+de+Hotmart+a+sus+Micro-Bots",
+        status_code=302,
+    )
+
+
+@router.post("/hotmart/auto-discover")
+async def admin_auto_discover_hotmart_catalog(
+    request: Request,
+    max_clones: int = Form(15),
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """
+    Entra automáticamente al catálogo de Hotmart Marketplace, busca productos ganadores
+    para los Micro-Bots y los asigna sin intervención manual.
+    """
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    from app.services.hotmart_sync import auto_discover_hotmart_catalog_for_clones
+
+    count = await auto_discover_hotmart_catalog_for_clones(
+        session=session,
+        max_clones_to_scan=max(1, min(max_clones, 50)),
+    )
+    return RedirectResponse(
+        url=f"/admin?msg=Auto-Explorador+Hotmart+asigno+{count}+productos+nuevos+a+los+Micro-Bots",
+        status_code=302,
+    )
+
+
 @router.post("/clones/{clone_id}/toggle")
 async def toggle_clone_active_state(
     clone_id: int,

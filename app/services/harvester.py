@@ -358,6 +358,73 @@ class HotmartHarvester(BaseMarketplaceHarvester):
             if len(results) >= max_candidates:
                 break
 
+        if not results:
+            # Si el clon aún no tiene productos pendientes en su pool, entra automáticamente al catálogo de Hotmart
+            from app.services.hotmart_sync import search_public_hotmart_marketplace
+
+            search_term = clone.niche_name.split()[0] if clone.niche_name else "curso"
+            if clone.search_keywords:
+                search_term = clone.search_keywords[0].split()[0]
+
+            discovered = await search_public_hotmart_marketplace(search_term, max_results=max_candidates)
+            for prod in discovered:
+                prod_url = str(prod["url"]).strip()
+                url_hash = hashlib.sha1(prod_url.encode("utf-8")).hexdigest()[:10].upper()
+                external_id = f"HOT_{url_hash}"
+
+                if await is_item_recently_published(
+                    session=session,
+                    clone_id=clone.id,
+                    external_item_id=external_id,
+                ):
+                    continue
+
+                sale_p = Decimal(str(round(float(prod.get("sale_price") or 39.0), 2)))
+                if sale_p <= Decimal("0.00"):
+                    sale_p = Decimal("39.00")
+                orig_p = (sale_p * Decimal("2.0")).quantize(Decimal("0.01"))
+
+                existing_pool = (
+                    await session.execute(
+                        select(HotmartProductPool)
+                        .where(HotmartProductPool.external_item_id == external_id)
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+
+                if existing_pool is None:
+                    pool_item = HotmartProductPool(
+                        clone_id=clone.id,
+                        external_item_id=external_id,
+                        title=str(prod["title"])[:500],
+                        hotlink_url=prod_url,
+                        image_url=str(prod["image_url"]),
+                        original_price=orig_p,
+                        sale_price=sale_p,
+                        discount_percent=Decimal("50.00"),
+                        currency="USD",
+                        coupon_code="",
+                        is_active=True,
+                    )
+                    session.add(pool_item)
+                    await session.commit()
+
+                results.append(
+                    HarvestedCandidate(
+                        external_item_id=external_id,
+                        source_marketplace=MarketplaceEnum.HOTMART,
+                        title=str(prod["title"])[:500],
+                        original_price=orig_p,
+                        sale_price=sale_p,
+                        discount_percent=Decimal("50.00"),
+                        currency="USD",
+                        raw_product_url=prod_url,
+                        image_url=str(prod["image_url"]),
+                    )
+                )
+                if len(results) >= max_candidates:
+                    break
+
         return results
 
     async def search_keyword_deals(
