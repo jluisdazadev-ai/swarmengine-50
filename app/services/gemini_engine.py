@@ -261,24 +261,39 @@ async def generate_offer_copy_with_gemini(
     sale_formatted = format_currency_amount(candidate.sale_price, candidate.currency)
     savings_formatted = format_currency_amount(savings_amount, candidate.currency)
 
+    is_hotmart = candidate.source_marketplace.value == "HOTMART"
+    market_context_rules = (
+        "CONTEXTO DE MERCADO (ESTRATEGIA MULTI-PAÍS HISPANO HIGH-TICKET):\n"
+        "- Tu audiencia compra desde EE.UU. (US Latinos), México, España, Colombia y Chile.\n"
+        "- Usa español neutro internacional de alta conversión (evita modismos cerrados de un solo país).\n"
+        "- Resalta que el programa incluye acceso online inmediato 24/7, Certificado Internacional de Finalización, "
+        "Garantía de Satisfacción de 7 días respaldada por Hotmart y pago seguro en moneda local "
+        "(Tarjeta Débito/Crédito, PayPal, OXXO/SPEI en México, PSE/Nequi en Colombia, WebPay/Sencillito en Chile).\n"
+        "- Enfócate en el retorno de inversión (ROI): cómo esta habilidad u oficio permite generar ingresos reales o escalar un negocio.\n\n"
+        if is_hotmart
+        else ""
+    )
+
     prompt = (
         f"Eres el redactor titular del canal especializado '{clone.niche_name}'.\n"
         f"Tu estilo y personalidad obligatoria: {clone.persona_prompt_style}\n\n"
+        f"{market_context_rules}"
         "DATOS REALES VERIFICADOS DEL PRODUCTO EN OFERTA:\n"
         f"- Producto: {candidate.title}\n"
-        f"- Tienda: {candidate.source_marketplace.value}\n"
+        f"- Plataforma / Tienda: {candidate.source_marketplace.value}\n"
         f"- Precio anterior: {orig_formatted}\n"
         f"- Precio de oferta hoy: {sale_formatted}\n"
         f"- Descuento verificado: -{candidate.discount_percent}%\n"
         f"- Ahorro neto en dinero real: {savings_formatted}\n\n"
         "REGLAS ESTRICTAS DE GENERACIÓN:\n"
-        "1. `hook_headline`: Máximo 5 palabras vibrantes y directas para estampar en la tarjeta gráfica (ej. 'TORQUE BRUTAL A MITAD PRECIO' o 'PANEL 165HZ MÍNIMO HISTÓRICO').\n"
+        "1. `hook_headline`: Máximo 5 palabras vibrantes y directas para estampar en la tarjeta gráfica (ej. 'CERTIFÍCATE HOY A MITAD PRECIO' o 'DOMINA EL OFICIO MÁS RENTABLE').\n"
         "2. `telegram_post_html`: Máximo 55 palabras. Usa únicamente etiquetas HTML válidas en Telegram (`<b>`, `<i>`, `<s>`). "
         "Incluye el precio anterior tachado con `<s>`, el precio actual en `<b>`, el ahorro exacto en dinero real "
         f"({savings_formatted}) y un llamado a la acción directo al final. Prohibido sonar robótico o usar clichés como 'En el vertiginoso mundo de...'.\n"
-        "3. `seo_meta_description`: Exactamente entre 120 y 150 caracteres optimizados para CTR orgánico en Google.\n"
+        "3. `seo_meta_description`: Exactamente entre 120 y 150 caracteres optimizados para CTR orgánico en Google (EE.UU., México, España, Colombia y Chile).\n"
         "4. `seo_mini_review_html`: Alrededor de 250 palabras en HTML semántico limpio (`<h3>`, `<p>`, `<ul>`, `<li>`, `<strong>`) "
-        "explicando por qué vale la pena este descuento, análisis técnico de sus especificaciones clave y para qué perfil de comprador es ideal."
+        "explicando por qué vale la pena este descuento, qué aprenderá o logrará el comprador, el retorno de inversión (ROI), "
+        "la garantía de 7 días y para qué perfil de estudiante o profesional en EE.UU., México, España, Colombia o Chile es ideal."
     )
 
     response = await asyncio.to_thread(

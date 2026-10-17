@@ -46,7 +46,7 @@ class SystemSettings(Base):
     base_shortlink_domain: Mapped[str] = mapped_column(
         String(255), nullable=False, default="https://ofertas.veloz.digital"
     )
-    preferred_marketplace_mode: Mapped[str] = mapped_column(String(30), nullable=False, default="HYBRID")
+    preferred_marketplace_mode: Mapped[str] = mapped_column(String(30), nullable=False, default="HOTMART")
     hotmart_hottok: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     hotmart_client_id: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     hotmart_client_secret: Mapped[str] = mapped_column(String(255), nullable=False, default="")

@@ -53,12 +53,26 @@
                         Ahorras {{ savings_formatted }} hoy
                     </span>
                 </div>
+                {% if offer.source_marketplace.value == 'HOTMART' %}
+                <div class="mt-4 pt-3 border-t border-slate-800/80 flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                    <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-700">🌎 Disponible en: 🇺🇸 EE.UU. · 🇲🇽 México · 🇪🇸 España · 🇨🇴 Colombia · 🇨🇱 Chile</span>
+                    <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">🛡️ Garantía 7 Días Hotmart</span>
+                    <span class="px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">🎓 Incluye Certificado Online</span>
+                </div>
+                <p class="mt-2 text-[11px] text-slate-400">
+                    💳 Conversión automática a tu moneda local en el checkout oficial (Tarjeta, PayPal, OXXO/SPEI, PSE/Nequi, WebPay).
+                </p>
+                {% endif %}
             </div>
         </div>
 
         <div class="space-y-3">
             <a href="/go/{{ offer.short_code }}" target="_blank" rel="nofollow noopener" class="w-full inline-flex items-center justify-center gap-2 py-4 px-6 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-base shadow-lg transition">
+                {% if offer.source_marketplace.value == 'HOTMART' %}
+                🔥 Acceder al Programa Oficial con {{ offer.discount_percent|round|int }}% OFF en Hotmart ↗
+                {% else %}
                 🔥 Ir a la Oferta Real en {{ offer.source_marketplace.value }} ↗
+                {% endif %}
             </a>
             {% if telegram_url %}
             <a href="{{ telegram_url }}" target="_blank" rel="noopener" class="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700">

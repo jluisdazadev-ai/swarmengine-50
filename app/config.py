@@ -63,10 +63,10 @@ class Settings(BaseSettings):
         description="Dominio público base para enlaces cortos /go/{short_code} y portal pSEO",
     )
 
-    # Modo de Marketplace Preferido (HYBRID, HOTMART, MERCADOLIBRE, ALIEXPRESS)
+    # Modo de Marketplace Preferido (HOTMART por defecto para Opción A: EE.UU. Hispano, México, España, Colombia y Chile)
     preferred_marketplace_mode: str = Field(
-        default="HYBRID",
-        description="Prioridad de cosecha: HYBRID (Hotmart + Tiendas), HOTMART, MERCADOLIBRE o ALIEXPRESS",
+        default="HOTMART",
+        description="Prioridad de cosecha: HOTMART (Opción A Multi-País High-Ticket), HYBRID, MERCADOLIBRE o ALIEXPRESS",
     )
 
     # Parámetros de Hotmart (Ideal para Colombia y Latinoamérica en USD)
