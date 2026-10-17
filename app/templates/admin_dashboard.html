@@ -119,12 +119,12 @@
                     </select>
                 </div>
                 <div class="flex flex-col justify-end gap-2">
-                    <label class="inline-flex items-center gap-2 text-xs text-slate-200 cursor-pointer">
-                        <input type="checkbox" name="publish_now" checked class="rounded bg-slate-900 border-slate-700 text-emerald-500">
-                        <span>Redactar con IA y publicar ahora mismo</span>
+                    <label class="inline-flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                        <input type="checkbox" name="publish_now" class="rounded bg-slate-900 border-slate-700 text-emerald-500">
+                        <span>Publicar ahora mismo (dejar desmarcado para solo guardar)</span>
                     </label>
                     <button type="submit" class="w-full py-2.5 px-4 rounded-xl bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-xs transition shadow-lg">
-                        🔥 Importar HotLink y Publicar Oferta
+                        💾 Guardar HotLink en Cola del Bot
                     </button>
                 </div>
             </form>
@@ -134,7 +134,7 @@
                 <form action="/admin/hotmart/bulk-auto-assign" method="post" class="lg:col-span-8 space-y-3">
                     <div class="flex items-center justify-between">
                         <label class="block text-xs font-bold text-emerald-400">
-                            🧠 Pegar Lista de HotLinks en Bloque (Gemini 2.5 Flash los clasifica y reparte SOLO a los 50 Micro-Bots)
+                            🧠 Pegar Lista de HotLinks en Bloque (Se guardan en sus Bots SIN publicar aún)
                         </label>
                         <input type="text" name="default_coupon" placeholder="Cupón global opcional (ej. 50OFF)" class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white w-48">
                     </div>
@@ -142,11 +142,11 @@
                         name="raw_urls_text"
                         rows="3"
                         required
-                        placeholder="Pega aquí 5, 20 o 50 enlaces https://go.hotmart.com/... (uno por línea). No tienes que elegir nicho ni escribir título: el sistema entra a cada enlace, extrae la portada y Gemini 2.5 Flash lo asigna automáticamente al Micro-Bot ideal."
+                        placeholder="Pega aquí 5, 20 o 50 enlaces https://go.hotmart.com/... (uno por línea). No tienes que elegir nicho ni escribir título: el sistema extrae los datos y Gemini 2.5 Flash los guarda en la cola del Micro-Bot ideal sin iniciar publicaciones."
                         class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500"
                     ></textarea>
                     <button type="submit" class="py-2.5 px-5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs transition">
-                        🤖 Analizar Enlaces y Auto-Asignar a los 50 Micro-Bots con IA
+                        🤖 Analizar Enlaces y Guardar en los 50 Micro-Bots (Sin Iniciar Aún)
                     </button>
                 </form>
 
@@ -154,17 +154,63 @@
                     <div>
                         <h3 class="text-xs font-extrabold text-white mb-1">🌐 Auto-Explorador del Mercado Hotmart</h3>
                         <p class="text-xs text-slate-400 leading-relaxed mb-3">
-                            Hace que el sistema entre por sí solo al catálogo de Hotmart en español, busque cursos/infoproductos para cada nicho y los asigne automáticamente a tus bots.
+                            Hace que el sistema entre por sí solo al catálogo de Hotmart en español, busque cursos/infoproductos para cada nicho y los guarde en la cola de tus bots.
                         </p>
                     </div>
                     <form action="/admin/hotmart/auto-discover" method="post" class="space-y-2">
                         <input type="hidden" name="max_clones" value="20">
                         <button type="submit" class="w-full py-2.5 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs transition">
-                            🚀 Auto-Explorar Hotmart y Asignar a Bots
+                            🚀 Auto-Explorar Hotmart y Guardar en Cola
                         </button>
                     </form>
                 </div>
             </div>
+
+            {% if hotmart_items %}
+            <div class="mt-6 pt-5 border-t border-slate-800/80">
+                <h3 class="text-xs font-extrabold uppercase tracking-wider text-orange-300 mb-3">
+                    📦 Productos Guardados en la Cola de tus Micro-Bots ({{ hotmart_items|length }} recientes — Listos para cuando actives los bots)
+                </h3>
+                <div class="overflow-x-auto bg-slate-950/80 border border-slate-800 rounded-xl">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="border-b border-slate-800 text-slate-400">
+                                <th class="py-2.5 px-3">Micro-Bot Asignado</th>
+                                <th class="py-2.5 px-3">Producto Extraído</th>
+                                <th class="py-2.5 px-3">HotLink Guardado</th>
+                                <th class="py-2.5 px-3 text-right">Precio Oferta</th>
+                                <th class="py-2.5 px-3 text-center">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800/60">
+                            {% for item in hotmart_items %}
+                            <tr class="hover:bg-slate-900/60">
+                                <td class="py-2 px-3 font-mono font-bold text-emerald-400">
+                                    {{ item.clone.clone_code if item.clone else item.clone_id }} — {{ item.clone.niche_name[:28] if item.clone else '' }}
+                                </td>
+                                <td class="py-2 px-3 text-slate-200 font-medium truncate max-w-xs">
+                                    {{ item.title }}
+                                </td>
+                                <td class="py-2 px-3 font-mono text-slate-400 truncate max-w-xs">
+                                    <a href="{{ item.hotlink_url }}" target="_blank" class="hover:text-orange-300">{{ item.hotlink_url[:45] }}...</a>
+                                </td>
+                                <td class="py-2 px-3 text-right font-mono font-bold text-emerald-400">
+                                    ${{ "%.2f"|format(item.sale_price) }} {{ item.currency }} (-{{ item.discount_percent|round|int }}%)
+                                </td>
+                                <td class="py-2 px-3 text-center">
+                                    <form action="/admin/hotmart/{{ item.id }}/delete" method="post" class="inline">
+                                        <button type="submit" class="px-2 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-[11px]">
+                                            Quitar
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
         </section>
 
         <!-- Gráfica Chart.js + Acciones de Enjambre -->
@@ -211,7 +257,19 @@
             <div class="p-6 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                     <h2 class="text-lg font-bold text-white">🤖 Flota de {{ total_clones }} Micro-Bots Especializados</h2>
-                    <p class="text-xs text-slate-400">Control individual en 1 clic con HTMX y telemetría financiera en tiempo real.</p>
+                    <p class="text-xs text-slate-400">Puedes pausar toda la flota mientras cargas enlaces y activarla cuando estés listo.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <form action="/admin/clones/pause-all" method="post">
+                        <button type="submit" class="px-3.5 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition">
+                            ⏸️ Pausar Todos los 50 Bots (Modo Carga)
+                        </button>
+                    </form>
+                    <form action="/admin/clones/activate-all" method="post">
+                        <button type="submit" class="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold transition">
+                            ▶️ Activar Todos los 50 Bots
+                        </button>
+                    </form>
                 </div>
             </div>
             <div class="overflow-x-auto">

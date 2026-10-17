@@ -553,6 +553,75 @@ async def admin_generate_new_batch(
     )
 
 
+@router.post("/clones/pause-all")
+async def pause_all_clones(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """Pausa los 50 Micro-Bots en 1 clic para poder cargar enlaces en cola sin que ninguno publique aún."""
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    clones = list((await session.execute(select(BotClone))).scalars().all())
+    for clone in clones:
+        clone.is_active = False
+    await session.commit()
+
+    for clone in clones:
+        schedule_single_clone_job(clone)
+
+    return RedirectResponse(
+        url="/admin?msg=Todos+los+Micro-Bots+estan+PAUSADOS.+Puedes+cargar+tus+enlaces+tranquilamente",
+        status_code=302,
+    )
+
+
+@router.post("/clones/activate-all")
+async def activate_all_clones(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """Activa todos los Micro-Bots en 1 clic e inicia su programación automática en APScheduler."""
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    clones = list((await session.execute(select(BotClone))).scalars().all())
+    for clone in clones:
+        clone.is_active = True
+    await session.commit()
+
+    for clone in clones:
+        schedule_single_clone_job(clone)
+
+    return RedirectResponse(
+        url="/admin?msg=Todos+los+Micro-Bots+han+sido+ACTIVADOS+y+programados",
+        status_code=302,
+    )
+
+
+@router.post("/hotmart/{pool_id}/delete")
+async def delete_hotmart_pool_item(
+    pool_id: int,
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """Elimina un producto guardado de la cola HotmartProductPool."""
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    item = (
+        await session.execute(select(HotmartProductPool).where(HotmartProductPool.id == pool_id).limit(1))
+    ).scalar_one_or_none()
+    if item is not None:
+        await session.delete(item)
+        await session.commit()
+
+    return RedirectResponse(
+        url="/admin?msg=Enlace+eliminado+de+la+cola+de+Hotmart",
+        status_code=302,
+    )
+
+
 @router.post("/darwin/run")
 async def admin_trigger_darwin_cycle(
     request: Request,
