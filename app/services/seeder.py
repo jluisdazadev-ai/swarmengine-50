@@ -685,6 +685,14 @@ async def ensure_system_settings(session: AsyncSession) -> SystemSettings:
         await session.commit()
         await session.refresh(sys_settings)
         logger.info("Registro inicial de SystemSettings creado en PostgreSQL.")
+    elif sys_settings.base_shortlink_domain in {
+        "https://ofertas.swarmengine.pro",
+        "http://localhost:8000",
+        "",
+    }:
+        sys_settings.base_shortlink_domain = settings.base_shortlink_domain
+        await session.commit()
+        await session.refresh(sys_settings)
 
     return sys_settings
 

@@ -43,7 +43,7 @@ class SystemSettings(Base):
     evolution_api_url: Mapped[str] = mapped_column(String(255), nullable=False, default="http://localhost:8080")
     evolution_api_key: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     base_shortlink_domain: Mapped[str] = mapped_column(
-        String(255), nullable=False, default="https://ofertas.swarmengine.pro"
+        String(255), nullable=False, default="https://ofertas.veloz.digital"
     )
     mercadolibre_country_site: Mapped[str] = mapped_column(String(10), nullable=False, default="MCO")
     mercadolibre_affiliate_matt_tool: Mapped[str] = mapped_column(String(120), nullable=False, default="")

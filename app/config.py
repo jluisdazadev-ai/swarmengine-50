@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     evolution_instance_name: str = Field(default="swarm_master", description="Nombre de instancia en Evolution API")
 
     base_shortlink_domain: str = Field(
-        default="https://ofertas.swarmengine.pro",
+        default="https://ofertas.veloz.digital",
         description="Dominio público base para enlaces cortos /go/{short_code} y portal pSEO",
     )
 
