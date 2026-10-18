@@ -386,21 +386,32 @@
                     </thead>
                     <tbody class="divide-y divide-slate-800/70">
                         {% for lead in spider_leads %}
-                        <tr class="hover:bg-slate-900/60">
-                            <td class="py-2.5 px-3 font-mono font-bold text-emerald-400 whitespace-nowrap">
-                                {{ lead.clone_code }}<br>
-                                <span class="text-[10px] text-slate-400 font-sans">{{ lead.platform }}</span>
+                        <tr class="hover:bg-slate-900/60 transition">
+                            <td class="py-3 px-3 font-mono font-bold text-emerald-400 whitespace-nowrap">
+                                <span class="bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2 py-0.5 rounded text-[11px] block w-fit mb-1">
+                                    {{ lead.clone_code }}
+                                </span>
+                                <span class="text-[11px] text-slate-300 font-sans font-medium block">{{ lead.niche_name }}</span>
+                                <span class="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                                    🌐 {{ lead.platform }}
+                                </span>
                             </td>
-                            <td class="py-2.5 px-3 text-white font-semibold max-w-xs">
-                                <div class="text-[11px] text-amber-300">{{ lead.author }} pregunta:</div>
-                                <div>"{{ lead.question_title }}"</div>
+                            <td class="py-3 px-3 text-white font-semibold max-w-xs">
+                                <div class="text-[11px] text-amber-300 font-normal">👤 {{ lead.author }} pregunta:</div>
+                                <div class="text-xs text-slate-100 font-medium mt-0.5 leading-snug">"{{ lead.question_title }}"</div>
+                                <div class="text-[10px] text-slate-400 mt-1">Oferta vinculada: <span class="text-emerald-400">{{ lead.offer_title }}</span></div>
                             </td>
-                            <td class="py-2.5 px-3">
-                                <textarea readonly rows="2" onclick="this.select();navigator.clipboard.writeText(this.value);" class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-[11px] text-slate-200 cursor-pointer" title="Haz clic para copiar la respuesta con tu link sembrador de cookie">{{ lead.suggested_reply }}</textarea>
+                            <td class="py-3 px-3">
+                                <div class="space-y-1.5">
+                                    <textarea id="reply-{{ loop.index }}" readonly rows="3" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-[11px] text-slate-200 focus:ring-1 focus:ring-emerald-500 font-sans leading-relaxed select-all">{{ lead.suggested_reply }}</textarea>
+                                    <button type="button" onclick="copyReplyText(this, 'reply-{{ loop.index }}')" class="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-bold text-[11px] flex items-center gap-1.5 transition">
+                                        <span>📋 Copiar Respuesta + Link</span>
+                                    </button>
+                                </div>
                             </td>
-                            <td class="py-2.5 px-3 text-center whitespace-nowrap">
-                                <a href="{{ lead.thread_url }}" target="_blank" rel="noopener" class="inline-block px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-[11px]">
-                                    🎯 Ir al Hilo y Sembrar Cookie ↗
+                            <td class="py-3 px-3 text-center whitespace-nowrap align-middle">
+                                <a href="{{ lead.thread_url }}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-md shadow-emerald-500/20 transition">
+                                    🎯 Ir al Hilo y Pegar ↗
                                 </a>
                             </td>
                         </tr>
@@ -409,10 +420,76 @@
                 </table>
             </div>
             {% else %}
-            <p class="text-xs text-slate-400 italic">
-                Haz clic en <strong>"🕷️ Lanzar Spider Cazador de Compradores Ahora"</strong> para que tus bots rastreen conversaciones reales de personas interesadas en los temas de tus ofertas publicadas.
-            </p>
+            <div class="p-6 bg-slate-950/60 border border-dashed border-slate-800 rounded-xl mt-3 text-center">
+                <p class="text-sm text-slate-300 font-semibold mb-1">
+                    🔍 Aún no se han detectado conversaciones recientes en esta sesión.
+                </p>
+                <p class="text-xs text-slate-400">
+                    Haz clic en <strong>"🕷️ Lanzar Spider Cazador de Compradores Ahora"</strong> para rastrear discusiones en foros y comunidades en español y generar respuestas de alta conversión con tu enlace <code class="text-emerald-400">/go/...</code>.
+                </p>
+            </div>
             {% endif %}
+
+            <!-- MASTER-PLAN DE TRÁFICO ORGÁNICO PARA LOS 50 BOTS -->
+            <div class="mt-6 pt-5 border-t border-slate-800/80">
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="text-base">🚀</span>
+                    <h3 class="text-sm font-bold text-white tracking-wide uppercase">Estrategia Maestra de Tráfico Activo (4 Motores de Atracción de Clientes)</h3>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between">
+                        <div>
+                            <div class="text-emerald-400 font-black text-xs mb-1">1. SPIDER FRANCOTIRADOR</div>
+                            <div class="text-white text-xs font-bold mb-1">Sembrado de Cookies (60 Días)</div>
+                            <p class="text-[11px] text-slate-400 leading-snug">
+                                Responde directamente a personas buscando aprender tu oficio en foros y Reddit. Si hacen clic una sola vez, la cookie de afiliado de Hotmart dura 60 días en su navegador.
+                            </p>
+                        </div>
+                        <div class="mt-2.5 pt-2 border-t border-slate-800/80 text-[10px] text-emerald-300 font-semibold">
+                            🔥 Tasa de conversión más alta (90% intención)
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between">
+                        <div>
+                            <div class="text-amber-400 font-black text-xs mb-1">2. PINTEREST & SOCIAL RSS</div>
+                            <div class="text-white text-xs font-bold mb-1">Tráfico Visual Pasivo Perpetuo</div>
+                            <p class="text-[11px] text-slate-400 leading-snug">
+                                Pinterest es el buscador de compras #1 en manualidades, cursos y cocina. Conecta el feed <code class="text-amber-300">/feed.xml</code> en IFTTT/Make para autopublicar pines con tus links acortados.
+                            </p>
+                        </div>
+                        <div class="mt-2.5 pt-2 border-t border-slate-800/80 text-[10px] text-amber-300 font-semibold">
+                            📌 Los pines siguen atrayendo clics por 2+ años
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between">
+                        <div>
+                            <div class="text-sky-400 font-black text-xs mb-1">3. SEO PROGRAMÁTICO</div>
+                            <div class="text-white text-xs font-bold mb-1">50 Landing Pages IndexNow</div>
+                            <p class="text-[11px] text-slate-400 leading-snug">
+                                Cada uno de tus 50 Micro-Bots tiene su página propia <code class="text-sky-300">/c/{slug}</code> optimizada con Schema de Google Course y notificaciones instantáneas de IndexNow a Bing y Yandex.
+                            </p>
+                        </div>
+                        <div class="mt-2.5 pt-2 border-t border-slate-800/80 text-[10px] text-sky-300 font-semibold">
+                            ⚡ Tráfico de búsqueda orgánica gratuito
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between">
+                        <div>
+                            <div class="text-purple-400 font-black text-xs mb-1">4. CANAL DE CHOLLOS</div>
+                            <div class="text-white text-xs font-bold mb-1">Comunidad de Telegram / WhatsApp</div>
+                            <p class="text-[11px] text-slate-400 leading-snug">
+                                Crea un canal público ("Cursos y Becas Online"). El sistema publica ofertas formativas con cupón de 50% de descuento. El tráfico recurrente compra múltiples veces al año.
+                            </p>
+                        </div>
+                        <div class="mt-2.5 pt-2 border-t border-slate-800/80 text-[10px] text-purple-300 font-semibold">
+                            📱 Compradores recurrentes y fieles
+                        </div>
+                    </div>
+                </div>
+            </div>
         </section>
 
         <!-- Gráfica Chart.js + Acciones de Enjambre -->
@@ -732,6 +809,37 @@
     </main>
 
     <script>
+        function copyReplyText(btn, elementId) {
+            const textarea = document.getElementById(elementId);
+            if (!textarea) return;
+            const textToCopy = textarea.value;
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    const originalHtml = btn.innerHTML;
+                    btn.innerHTML = '<span>✅ ¡Copiado con Link!</span>';
+                    btn.classList.remove('bg-emerald-500/20', 'text-emerald-300');
+                    btn.classList.add('bg-emerald-500', 'text-slate-950');
+                    setTimeout(() => {
+                        btn.innerHTML = originalHtml;
+                        btn.classList.remove('bg-emerald-500', 'text-slate-950');
+                        btn.classList.add('bg-emerald-500/20', 'text-emerald-300');
+                    }, 2500);
+                }).catch(() => {
+                    fallbackCopy(textarea, btn);
+                });
+            } else {
+                fallbackCopy(textarea, btn);
+            }
+        }
+
+        function fallbackCopy(textarea, btn) {
+            textarea.select();
+            document.execCommand('copy');
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<span>✅ ¡Copiado!</span>';
+            setTimeout(() => { btn.innerHTML = originalHtml; }, 2000);
+        }
+
         const ctx = document.getElementById('swarmMetricsChart');
         if (ctx) {
             new Chart(ctx, {
