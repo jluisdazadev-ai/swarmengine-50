@@ -33,6 +33,13 @@
                 </div>
             </form>
             <div class="flex items-center gap-3">
+                {% if telegram_channel_url %}
+                <a href="{{ telegram_channel_url }}" target="_blank" rel="noopener" class="text-xs px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 font-bold flex items-center gap-1.5 transition">
+                    <span>✈️</span>
+                    <span>{{ telegram_channel_name|default('Canal Telegram') }}</span>
+                    <span class="text-[10px]">↗</span>
+                </a>
+                {% endif %}
                 <a href="/sitemap.xml" class="text-xs text-slate-400 hover:text-slate-200 hidden md:inline">Sitemap XML</a>
                 <a href="/admin" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium">Panel Admin</a>
             </div>

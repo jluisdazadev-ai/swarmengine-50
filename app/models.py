@@ -41,6 +41,7 @@ class SystemSettings(Base):
     gemini_api_key: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     telegram_bot_token: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     admin_telegram_chat_id: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    telegram_channel_name: Mapped[str] = mapped_column(String(150), nullable=False, default="Canal Oficial de Ofertas")
     evolution_api_url: Mapped[str] = mapped_column(String(255), nullable=False, default="http://localhost:8080")
     evolution_api_key: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     base_shortlink_domain: Mapped[str] = mapped_column(

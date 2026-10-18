@@ -336,7 +336,39 @@
                                     </div>
                                 </td>
                                 <td class="py-2 px-3 text-right font-mono font-bold text-emerald-400">
-                                    ${{ "%.2f"|format(item.sale_price) }} {{ item.currency }} (-{{ item.discount_percent|round|int }}%)
+                                    <div class="flex flex-col items-end gap-1">
+                                        <div>
+                                            <span class="text-white">${{ "%.2f"|format(item.sale_price) }}</span>
+                                            <span class="text-slate-500 line-through text-[10px] ml-1">${{ "%.2f"|format(item.original_price) }}</span>
+                                            <span class="text-rose-400 font-bold ml-1">(-{{ item.discount_percent|round|int }}%)</span>
+                                        </div>
+                                        <details class="relative text-left">
+                                            <summary class="cursor-pointer text-[10px] font-bold text-sky-400 hover:text-sky-300 list-none inline-block">
+                                                ✏️ Editar Precio
+                                            </summary>
+                                            <div class="absolute right-0 top-6 z-30 w-72 bg-slate-900 border border-slate-700 rounded-xl p-3 shadow-2xl space-y-2">
+                                                <form action="/admin/hotmart/{{ item.id }}/edit-price" method="post" class="space-y-2 font-sans">
+                                                    <div>
+                                                        <label class="block text-[10px] text-slate-400 font-bold">Título / Nombre</label>
+                                                        <input type="text" name="title" value="{{ item.title }}" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white">
+                                                    </div>
+                                                    <div class="grid grid-cols-2 gap-2">
+                                                        <div>
+                                                            <label class="block text-[10px] text-slate-400 font-bold">Venta (Oferta USD)</label>
+                                                            <input type="number" step="0.01" name="sale_price" value="{{ '%.2f'|format(item.sale_price) }}" required class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white">
+                                                        </div>
+                                                        <div>
+                                                            <label class="block text-[10px] text-slate-400 font-bold">Máximo Web USD</label>
+                                                            <input type="number" step="0.01" name="original_price" value="{{ '%.2f'|format(item.original_price) }}" required class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white">
+                                                        </div>
+                                                    </div>
+                                                    <button type="submit" class="w-full py-1 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition">
+                                                        💾 Guardar Precios
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </details>
+                                    </div>
                                 </td>
                                 <td class="py-2 px-3 text-center">
                                     <form action="/admin/hotmart/{{ item.id }}/delete" method="post" class="inline">
@@ -531,6 +563,99 @@
             </div>
         </section>
 
+        <!-- ESTADÍSTICAS DE TRÁFICO Y CLICS DE LOS BOTS -->
+        <section class="bg-slate-900 border border-sky-500/30 rounded-2xl overflow-hidden">
+            <div class="p-5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div class="flex items-center gap-3">
+                    <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-sky-500/20 text-sky-400 font-bold text-lg">📊</span>
+                    <div>
+                        <h2 class="text-base font-extrabold text-white">Estadísticas de Tráfico & Clics en Vivo de los Micro-Bots</h2>
+                        <p class="text-xs text-slate-400">
+                            Registro en tiempo real de redirecciones y clics <code class="text-sky-300 font-mono">/go/{short_code}</code> generados por las Spiders y Bots.
+                        </p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 text-xs">
+                    <div class="bg-slate-950 px-3.5 py-2 rounded-xl border border-slate-800 flex items-center gap-2">
+                        <span class="text-slate-400">Clics Hoy:</span>
+                        <span class="font-black text-sky-400 text-sm">{{ clicks_today_total }}</span>
+                    </div>
+                    <div class="bg-slate-950 px-3.5 py-2 rounded-xl border border-slate-800 flex items-center gap-2">
+                        <span class="text-slate-400">Clics Totales:</span>
+                        <span class="font-black text-emerald-400 text-sm">{{ global_clicks }}</span>
+                    </div>
+                </div>
+            </div>
+
+            {% if recent_clicks %}
+            <div class="overflow-x-auto max-h-80 overflow-y-auto">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead class="sticky top-0 bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
+                        <tr>
+                            <th class="py-2.5 px-4">Fecha / Hora</th>
+                            <th class="py-2.5 px-4">Micro-Bot</th>
+                            <th class="py-2.5 px-4">Oferta / Shortlink</th>
+                            <th class="py-2.5 px-4">Fuente / Referer</th>
+                            <th class="py-2.5 px-4">Navegador / Dispositivo</th>
+                            <th class="py-2.5 px-4 text-right">Hash Visitante</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/60 font-mono">
+                        {% for click in recent_clicks %}
+                        <tr class="hover:bg-slate-800/40">
+                            <td class="py-2 px-4 text-slate-400">
+                                {{ click.clicked_at.strftime('%d/%m/%Y %H:%M:%S') if click.clicked_at else 'Reciente' }}
+                            </td>
+                            <td class="py-2 px-4 text-emerald-400 font-bold font-sans">
+                                {% if click.clone %}
+                                <a href="/c/{{ click.clone.pseo_category_slug }}" target="_blank" class="hover:underline">
+                                    {{ click.clone.clone_code }} — {{ click.clone.niche_name[:24] }}
+                                </a>
+                                {% else %}
+                                Bot #{{ click.clone_id }}
+                                {% endif %}
+                            </td>
+                            <td class="py-2 px-4 font-sans text-white">
+                                {% if click.offer %}
+                                <a href="/go/{{ click.offer.short_code }}" target="_blank" class="hover:text-sky-300 font-medium truncate block max-w-xs" title="{{ click.offer.title }}">
+                                    {{ click.offer.title[:35] }}... (<code class="text-orange-300 font-mono">/go/{{ click.offer.short_code }}</code>)
+                                </a>
+                                {% else %}
+                                Oferta #{{ click.offer_id }}
+                                {% endif %}
+                            </td>
+                            <td class="py-2 px-4 font-sans">
+                                {% if not click.referer or click.referer == 'direct' %}
+                                <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">Directo / Link</span>
+                                {% elif 'telegram' in click.referer.lower() %}
+                                <span class="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[10px]">✈️ Telegram</span>
+                                {% elif 'google' in click.referer.lower() %}
+                                <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px]">🔍 Google Search</span>
+                                {% elif 'facebook' in click.referer.lower() or 'fb' in click.referer.lower() %}
+                                <span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px]">📘 Facebook</span>
+                                {% else %}
+                                <span class="text-slate-300 text-[11px] truncate max-w-xs block" title="{{ click.referer }}">{{ click.referer[:30] }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="py-2 px-4 text-slate-400 text-[11px] truncate max-w-xs" title="{{ click.user_agent }}">
+                                {{ click.user_agent[:32] if click.user_agent else 'Navegador Web' }}
+                            </td>
+                            <td class="py-2 px-4 text-right text-slate-500 text-[10px]">
+                                {{ click.visitor_ip_hash[:8] if click.visitor_ip_hash else '—' }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="p-8 text-center text-slate-400 text-sm">
+                <p>⏳ Aún no se han registrado clics en los enlaces <code class="text-sky-300 font-mono">/go/</code>.</p>
+                <p class="text-xs text-slate-500 mt-1">Los clics y compradores aparecerán aquí en vivo a medida que visiten tus publicaciones desde Telegram, Google o Redes Sociales.</p>
+            </div>
+            {% endif %}
+        </section>
+
         {% if recent_offers %}
         <!-- Últimas Ofertas Publicadas por los Bots -->
         <section class="bg-slate-900 border border-emerald-500/30 rounded-2xl overflow-hidden">
@@ -574,7 +699,40 @@
                                 {{ off.title }}
                             </td>
                             <td class="py-2.5 px-4 font-mono text-emerald-300">
-                                ${{ "%.2f"|format(off.sale_price) }} {{ off.currency }} (-{{ off.discount_percent|round|int }}%)
+                                <div class="flex flex-col gap-1">
+                                    <div>
+                                        <span class="font-bold text-white">${{ "%.2f"|format(off.sale_price) }}</span>
+                                        <span class="text-slate-500 line-through text-[10px] ml-1">${{ "%.2f"|format(off.original_price) }}</span>
+                                        <span class="text-rose-400 font-bold ml-1">(-{{ off.discount_percent|round|int }}%)</span>
+                                    </div>
+                                    <details class="relative text-left font-sans">
+                                        <summary class="cursor-pointer text-[10px] font-bold text-sky-400 hover:text-sky-300 list-none inline-block">
+                                            ✏️ Editar Precio en Vivo
+                                        </summary>
+                                        <div class="absolute left-0 top-6 z-30 w-72 bg-slate-900 border border-slate-700 rounded-xl p-3 shadow-2xl space-y-2">
+                                            <form action="/admin/offers/{{ off.id }}/edit-price" method="post" class="space-y-2">
+                                                <div>
+                                                    <label class="block text-[10px] text-slate-400 font-bold">Título / Encabezado</label>
+                                                    <input type="text" name="title" value="{{ off.title }}" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white">
+                                                </div>
+                                                <div class="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label class="block text-[10px] text-slate-400 font-bold">Venta (Oferta USD)</label>
+                                                        <input type="number" step="0.01" name="sale_price" value="{{ '%.2f'|format(off.sale_price) }}" required class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white">
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-[10px] text-slate-400 font-bold">Máximo Web USD</label>
+                                                        <input type="number" step="0.01" name="original_price" value="{{ '%.2f'|format(off.original_price) }}" required class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white">
+                                                    </div>
+                                                </div>
+                                                <p class="text-[9px] text-slate-400">Regenera la tarjeta gráfica 1080x1080 y actualiza Redis en caliente.</p>
+                                                <button type="submit" class="w-full py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition">
+                                                    💾 Guardar y Actualizar Oferta
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </details>
+                                </div>
                             </td>
                             <td class="py-2.5 px-4 space-x-1">
                                 <span class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Web pSEO ✅</span>
@@ -620,17 +778,26 @@
                             🔍 Auto-Detectar ID de mi Canal
                         </button>
                     </form>
-                    <form action="/admin/clones/set-master-telegram" method="post" class="flex items-center gap-1.5">
+                    <form action="/admin/clones/set-master-telegram" method="post" class="flex flex-wrap items-center gap-1.5">
                         <input
                             type="text"
                             name="master_channel"
                             required
                             placeholder="@TuCanalTelegram"
                             value="{{ sys_settings.admin_telegram_chat_id }}"
+                            class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white w-36 font-mono"
+                            title="ID o handle del canal (@TuCanal o -100...)"
+                        >
+                        <input
+                            type="text"
+                            name="channel_name"
+                            placeholder="Nombre del Canal (Ej. Ofertas VIP)"
+                            value="{{ sys_settings.telegram_channel_name or '' }}"
                             class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white w-44"
+                            title="Nombre público que aparecerá en los botones del portal web"
                         >
                         <button type="submit" class="px-3 py-2 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-xs font-bold transition">
-                            ✈️ Asignar Canal a los 50 Bots
+                            ✈️ Asignar Canal y Nombre
                         </button>
                     </form>
                     <form action="/admin/clones/pause-all" method="post">
@@ -775,6 +942,10 @@
                 <div>
                     <label class="block text-xs text-emerald-400 font-bold mb-1">Canal de Telegram Maestro (Ej. `@TuCanal` o `-100...` para los 50 Bots)</label>
                     <input type="text" name="admin_telegram_chat_id" placeholder="@OfertasVelozDigital o -100123456789" value="{{ sys_settings.admin_telegram_chat_id }}" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-sky-400 font-bold mb-1">Nombre Público del Canal Telegram (Para Botones Web)</label>
+                    <input type="text" name="telegram_channel_name" placeholder="Ej. Cazador de Ofertas & Cursos VIP" value="{{ sys_settings.telegram_channel_name or '' }}" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white">
                 </div>
                 <div>
                     <label class="block text-xs text-slate-400 mb-1">Evolution API URL (WhatsApp)</label>

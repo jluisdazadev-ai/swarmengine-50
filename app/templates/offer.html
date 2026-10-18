@@ -87,7 +87,7 @@
             </a>
             {% if telegram_url %}
             <a href="{{ telegram_url }}" target="_blank" rel="noopener" class="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700">
-                ✈️ Recibir alertas de {{ clone.niche_name }} en Telegram ({{ clone.telegram_channel_id }})
+                ✈️ Recibir alertas en Telegram: {{ telegram_channel_name|default(clone.niche_name) }} ↗
             </a>
             {% endif %}
         </div>

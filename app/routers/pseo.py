@@ -83,6 +83,10 @@ async def pseo_home_directory(
 
     latest_offers = list((await session.execute(offers_stmt)).scalars().all())
 
+    tg_name = getattr(sys_settings, "telegram_channel_name", "") or "Canal Oficial de Ofertas"
+    tg_handle = (sys_settings.admin_telegram_chat_id or "").lstrip("@")
+    tg_url = f"https://t.me/{tg_handle}" if tg_handle else ""
+
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -92,6 +96,8 @@ async def pseo_home_directory(
             "search_query": q or "",
             "base_domain": sys_settings.base_shortlink_domain.rstrip("/"),
             "total_clones": len(categories),
+            "telegram_channel_name": tg_name,
+            "telegram_channel_url": tg_url,
         },
     )
 
@@ -124,6 +130,7 @@ async def pseo_category_page(
 
     tg_handle = clone.telegram_channel_id.lstrip("@")
     telegram_url = f"https://t.me/{tg_handle}" if tg_handle else ""
+    telegram_channel_name = getattr(sys_settings, "telegram_channel_name", "") or clone.niche_name
 
     canonical_url = build_category_pseo_url(clone.pseo_category_slug, sys_settings=sys_settings)
 
@@ -134,6 +141,8 @@ async def pseo_category_page(
             "clone": clone,
             "offers": offers,
             "telegram_url": telegram_url,
+            "telegram_channel_name": telegram_channel_name,
+            "telegram_channel_url": telegram_url,
             "canonical_url": canonical_url,
             "base_domain": sys_settings.base_shortlink_domain.rstrip("/"),
         },
@@ -252,6 +261,7 @@ async def pseo_offer_detail_page(
 
     tg_handle = offer.clone.telegram_channel_id.lstrip("@")
     telegram_url = f"https://t.me/{tg_handle}" if tg_handle else ""
+    telegram_channel_name = getattr(sys_settings, "telegram_channel_name", "") or offer.clone.niche_name
 
     return templates.TemplateResponse(
         request=request,
@@ -265,6 +275,8 @@ async def pseo_offer_detail_page(
             "savings_formatted": format_currency_amount(savings_value, offer.currency),
             "schema_json_ld": json.dumps(schema_org_graph, ensure_ascii=False, indent=2),
             "telegram_url": telegram_url,
+            "telegram_channel_name": telegram_channel_name,
+            "telegram_channel_url": telegram_url,
             "base_domain": base_domain,
         },
     )

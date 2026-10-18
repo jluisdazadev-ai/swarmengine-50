@@ -203,11 +203,23 @@ async def admin_dashboard_view(
     )
     hotmart_items = list((await session.execute(hotmart_stmt)).scalars().all())
 
+    from app.models import ClickEvent
+
+    # Clics registrados en ClickEvent (Últimos 50 clics en tiempo real)
+    recent_clicks_stmt = (
+        select(ClickEvent)
+        .options(selectinload(ClickEvent.clone), selectinload(ClickEvent.offer))
+        .order_by(desc(ClickEvent.clicked_at))
+        .limit(50)
+    )
+    recent_clicks = list((await session.execute(recent_clicks_stmt)).scalars().all())
+    clicks_today_total = sum(item["clicks_today"] for item in clone_table)
+
     recent_offers_stmt = (
         select(ProductOffer)
         .options(selectinload(ProductOffer.clone))
         .order_by(desc(ProductOffer.detected_at))
-        .limit(15)
+        .limit(20)
     )
     recent_offers = list((await session.execute(recent_offers_stmt)).scalars().all())
 
@@ -219,6 +231,8 @@ async def admin_dashboard_view(
             "clone_table": clone_table,
             "hotmart_items": hotmart_items,
             "recent_offers": recent_offers,
+            "recent_clicks": recent_clicks,
+            "clicks_today_total": clicks_today_total,
             "spider_leads": get_cached_spider_leads(),
             "total_clones": len(clone_table),
             "active_bots_count": active_bots_count,
@@ -587,6 +601,122 @@ async def sync_and_activate_50_clones(
     )
 
 
+@router.post("/offers/{offer_id}/edit-price")
+async def edit_offer_price_manual(
+    offer_id: int,
+    request: Request,
+    sale_price: float = Form(...),
+    original_price: float = Form(...),
+    title: str = Form(""),
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """
+    Permite al administrador editar manualmente en caliente el precio de venta (oferta),
+    el precio máximo de lista publicado en la web y el título de una oferta ya publicada.
+    Regenera la tarjeta visual 1080x1080 y actualiza la caché Redis.
+    """
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    from app.services.hotmart_sync import clean_product_title
+    from app.services.image_card import generate_offer_card
+    from app.routers.redirect import cache_shortlink_in_redis
+
+    stmt = select(ProductOffer).options(selectinload(ProductOffer.clone)).where(ProductOffer.id == offer_id).limit(1)
+    offer = (await session.execute(stmt)).scalar_one_or_none()
+    if offer is None:
+        raise HTTPException(status_code=404, detail="Oferta no encontrada.")
+
+    sp_dec = Decimal(str(round(max(1.0, sale_price), 2)))
+    op_dec = Decimal(str(round(max(1.0, original_price), 2)))
+
+    # Asegurar que el precio regular sea estrictamente mayor al de venta para gancho
+    if op_dec <= sp_dec:
+        op_dec = (sp_dec * Decimal("2.0")).quantize(Decimal("0.01")) - Decimal("0.01")
+
+    disc_dec = (((op_dec - sp_dec) / op_dec) * Decimal("100.0")).quantize(Decimal("0.01"))
+
+    clean_t = clean_product_title(title.strip()) if title.strip() else clean_product_title(offer.title)
+    if clean_t:
+        offer.title = clean_t
+
+    offer.sale_price = sp_dec
+    offer.original_price = op_dec
+    offer.discount_percent = disc_dec
+
+    await session.commit()
+    await session.refresh(offer)
+    await cache_shortlink_in_redis(offer)
+
+    # Regenerar tarjeta gráfica 1080x1080
+    try:
+        clone = offer.clone
+        niche_name = clone.niche_name if clone else "Cursos Online"
+        await generate_offer_card(
+            image_url=offer.image_url,
+            hook_headline=offer.title[:60],
+            original_price=offer.original_price,
+            sale_price=offer.sale_price,
+            discount_percent=offer.discount_percent,
+            currency=offer.currency or "USD",
+            niche_name=niche_name,
+            short_code=offer.short_code,
+        )
+    except Exception as exc:
+        logger.debug("Aviso regenerando tarjeta para offer=%s: %s", offer.id, exc)
+
+    return RedirectResponse(
+        url=f"/admin?msg=Precio+de+oferta+{offer.short_code}+actualizado+manualmente:+Venta+${sp_dec}+USD,+Regular+${op_dec}+USD+(-{int(disc_dec)}%+OFF)",
+        status_code=302,
+    )
+
+
+@router.post("/hotmart/{pool_id}/edit-price")
+async def edit_hotmart_pool_price_manual(
+    pool_id: int,
+    request: Request,
+    sale_price: float = Form(...),
+    original_price: float = Form(...),
+    title: str = Form(""),
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """
+    Permite al administrador editar manualmente el precio de venta y precio regular
+    de un producto en cola en `HotmartProductPool`.
+    """
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    from app.services.hotmart_sync import clean_product_title
+
+    stmt = select(HotmartProductPool).where(HotmartProductPool.id == pool_id).limit(1)
+    item = (await session.execute(stmt)).scalar_one_or_none()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Producto en cola no encontrado.")
+
+    sp_dec = Decimal(str(round(max(1.0, sale_price), 2)))
+    op_dec = Decimal(str(round(max(1.0, original_price), 2)))
+
+    if op_dec <= sp_dec:
+        op_dec = (sp_dec * Decimal("2.0")).quantize(Decimal("0.01")) - Decimal("0.01")
+
+    disc_dec = (((op_dec - sp_dec) / op_dec) * Decimal("100.0")).quantize(Decimal("0.01"))
+
+    clean_t = clean_product_title(title.strip()) if title.strip() else clean_product_title(item.title)
+    if clean_t:
+        item.title = clean_t
+
+    item.sale_price = sp_dec
+    item.original_price = op_dec
+    item.discount_percent = disc_dec
+
+    await session.commit()
+    return RedirectResponse(
+        url=f"/admin?msg=Producto+en+cola+actualizado+manualmente:+Venta+${sp_dec}+USD,+Regular+${op_dec}+USD+(-{int(disc_dec)}%+OFF)",
+        status_code=302,
+    )
+
+
 @router.post("/spider/run")
 async def trigger_spider_buyer_hunter(
     request: Request,
@@ -815,6 +945,7 @@ async def update_system_settings(
     gemini_api_key: str = Form(""),
     telegram_bot_token: str = Form(""),
     admin_telegram_chat_id: str = Form(""),
+    telegram_channel_name: str = Form(""),
     evolution_api_url: str = Form(""),
     evolution_api_key: str = Form(""),
     base_shortlink_domain: str = Form(""),
@@ -836,6 +967,8 @@ async def update_system_settings(
         sys_settings.gemini_api_key = gemini_api_key.strip()
     if telegram_bot_token.strip():
         sys_settings.telegram_bot_token = telegram_bot_token.strip()
+    if telegram_channel_name.strip():
+        sys_settings.telegram_channel_name = telegram_channel_name.strip()
     clean_tg_channel = admin_telegram_chat_id.strip()
     if clean_tg_channel and not clean_tg_channel.startswith("@") and not clean_tg_channel.startswith("-") and not clean_tg_channel.isdigit():
         clean_tg_channel = f"@{clean_tg_channel}"
@@ -963,9 +1096,10 @@ async def delete_hotmart_pool_item(
 async def set_master_telegram_channel(
     request: Request,
     master_channel: str = Form(...),
+    channel_name: str = Form(""),
     session: AsyncSession = Depends(get_db_session),
 ) -> RedirectResponse:
-    """Asigna en 1 clic un mismo Canal de Telegram (ej. @OfertasVeloz) a los 50 Micro-Bots."""
+    """Asigna en 1 clic un mismo Canal de Telegram (ej. @OfertasVeloz) y su nombre público a los 50 Micro-Bots."""
     if not is_admin_authenticated(request):
         raise HTTPException(status_code=401, detail="No autorizado.")
 
@@ -973,16 +1107,20 @@ async def set_master_telegram_channel(
     if clean_channel and not clean_channel.startswith("@") and not clean_channel.startswith("-"):
         clean_channel = f"@{clean_channel}"
 
+    sys_settings = await ensure_system_settings(session)
     if clean_channel:
-        sys_settings = await ensure_system_settings(session)
         sys_settings.admin_telegram_chat_id = clean_channel
         clones = list((await session.execute(select(BotClone))).scalars().all())
         for clone in clones:
             clone.telegram_channel_id = clean_channel
-        await session.commit()
+
+    if channel_name.strip():
+        sys_settings.telegram_channel_name = channel_name.strip()
+
+    await session.commit()
 
     return RedirectResponse(
-        url=f"/admin?msg=Canal+de+Telegram+{clean_channel}+asignado+a+los+50+Micro-Bots",
+        url=f"/admin?msg=Canal+de+Telegram+{clean_channel}+y+nombre+asignados+a+los+50+Micro-Bots",
         status_code=302,
     )
 
@@ -994,7 +1132,7 @@ async def auto_detect_and_assign_telegram_channel(
 ) -> RedirectResponse:
     """
     Pregunta directamente a la API de Telegram (`getUpdates`) en qué Canal o Grupo fue agregado el Bot,
-    extrae el ID real verificado y lo asigna automáticamente a los 50 Micro-Bots.
+    extrae el ID real verificado y su nombre, y lo asigna automáticamente a los 50 Micro-Bots.
     """
     if not is_admin_authenticated(request):
         raise HTTPException(status_code=401, detail="No autorizado.")
@@ -1018,9 +1156,13 @@ async def auto_detect_and_assign_telegram_channel(
 
     best_chat = detected[0]
     real_id = best_chat["numeric_id"]
-    title = best_chat["title"].replace(" ", "+")[:40]
+    raw_title = best_chat.get("title", "").strip()
+    title = raw_title.replace(" ", "+")[:40]
 
     sys_settings.admin_telegram_chat_id = real_id
+    if raw_title:
+        sys_settings.telegram_channel_name = raw_title
+
     clones = list((await session.execute(select(BotClone))).scalars().all())
     for clone in clones:
         clone.telegram_channel_id = real_id
