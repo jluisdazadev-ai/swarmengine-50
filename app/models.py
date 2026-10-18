@@ -50,7 +50,7 @@ class SystemSettings(Base):
     hotmart_hottok: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     hotmart_client_id: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     hotmart_client_secret: Mapped[str] = mapped_column(String(255), nullable=False, default="")
-    hotmart_basic_auth: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    hotmart_basic_auth: Mapped[str] = mapped_column(Text, nullable=False, default="")
     mercadolibre_country_site: Mapped[str] = mapped_column(String(10), nullable=False, default="MCO")
     mercadolibre_affiliate_matt_tool: Mapped[str] = mapped_column(String(120), nullable=False, default="")
     amazon_partner_tag: Mapped[str] = mapped_column(String(120), nullable=False, default="")

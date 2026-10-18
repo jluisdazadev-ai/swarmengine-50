@@ -129,47 +129,127 @@
                 </div>
             </form>
 
-            <!-- AUTO-ASIGNADOR INTELIGENTE CON GEMINI 2.5 FLASH Y AUTO-EXPLORADOR HOTMART -->
-            <div class="mt-6 pt-6 border-t border-slate-800/80 grid grid-cols-1 lg:grid-cols-12 gap-6">
-                <form action="/admin/hotmart/bulk-auto-assign" method="post" class="lg:col-span-8 space-y-3">
-                    <div class="flex items-center justify-between">
-                        <label class="block text-xs font-bold text-emerald-400">
-                            🧠 Pegar Lista de HotLinks en Bloque (Se guardan en sus Bots SIN publicar aún)
-                        </label>
-                        <input type="text" name="default_coupon" placeholder="Cupón global opcional (ej. 50OFF)" class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white w-48">
+            <!-- CONEXIÓN DIRECTA A TU CUENTA DE HOTMART (MERCADO DE AFILIACIÓN + AUTO-AFILIACIÓN 1-CLIC) -->
+            <div class="mt-6 pt-6 border-t border-slate-800/80">
+                <div class="bg-slate-950/90 border border-orange-500/40 rounded-2xl p-4 sm:p-5 mb-6">
+                    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
+                        <div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="px-2 py-0.5 rounded bg-orange-500/20 text-orange-300 border border-orange-500/40 text-[10px] font-black uppercase">
+                                    🔑 Productos → Afiliarse a un Producto (Mercado de Afiliación Oficial)
+                                </span>
+                                {% if sys_settings.hotmart_basic_auth or sys_settings.hotmart_client_secret %}
+                                <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
+                                    ✅ Credencial / Sesión Hotmart Guardada
+                                </span>
+                                {% endif %}
+                            </div>
+                            <h3 class="text-sm font-extrabold text-white">
+                                Conectar tu Cuenta de Hotmart para Auto-Afiliación 1-Clic y Extracción Automática de `go.hotmart.com`
+                            </h3>
+                            <p class="text-xs text-slate-300 mt-0.5 leading-relaxed">
+                                El sistema entra a <strong>Productos → Afiliarse a un producto</strong> (<code class="text-orange-300">app-vlc.hotmart.com/market</code>), filtra cursos con <strong>Afiliación Inmediata (1-Clic)</strong>, alta calificación (★ 4.7+) y 50%–80% de comisión, <strong>se afilia automáticamente</strong> y toma tu link <code class="text-emerald-400">https://go.hotmart.com/...</code> para cada bot.
+                            </p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2 shrink-0">
+                            <a href="https://app-vlc.hotmart.com/market" target="_blank" class="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-orange-300 font-bold text-xs">
+                                1. Abrir Mercado de Afiliación Hotmart ↗
+                            </a>
+                            <button
+                                type="button"
+                                onclick="navigator.clipboard.writeText(&quot;copy(JSON.parse(localStorage.getItem('cas-js:user')||'{}').access_token || document.cookie)&quot;); this.innerText='✅ Comando Copiado (Pégalo en F12 → Console de Hotmart)';"
+                                class="px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-xs"
+                            >
+                                📋 2. Copiar Extractor de Sesión (1 Clic)
+                            </button>
+                            <a href="https://app-vlc.hotmart.com/tools/credentials" target="_blank" class="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 font-semibold text-xs">
+                                ⚙️ O ver Credenciales API Hotmart ↗
+                            </a>
+                        </div>
                     </div>
-                    <textarea
-                        name="raw_urls_text"
-                        rows="3"
-                        required
-                        placeholder="Pega aquí 5, 20 o 50 enlaces https://go.hotmart.com/... (uno por línea). No tienes que elegir nicho ni escribir título: el sistema extrae los datos y Gemini 2.5 Flash los guarda en la cola del Micro-Bot ideal sin iniciar publicaciones."
-                        class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500"
-                    ></textarea>
-                    <button type="submit" class="py-2.5 px-5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs transition">
-                        🤖 Analizar Enlaces y Guardar en los 50 Micro-Bots (Sin Iniciar Aún)
-                    </button>
-                </form>
 
-                <div class="lg:col-span-4 bg-slate-950/70 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
-                    <div>
-                        <h3 class="text-xs font-extrabold text-white mb-1">🌐 Auto-Explorador Coherente por Nicho (★ 4.7+ y Alto Margen)</h3>
-                        <p class="text-xs text-slate-400 leading-relaxed mb-3">
-                            Limpia cualquier producto mal asignado, busca en Hotmart por el tema exacto de cada bot (priorizando ★ 4.7+ y 50%-80% de comisión con afiliación inmediata) y los guarda en sus colas.
-                        </p>
-                    </div>
-                    <form action="/admin/hotmart/auto-discover" method="post" class="space-y-2">
-                        <input type="hidden" name="max_clones" value="50">
-                        <button type="submit" class="w-full py-2.5 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs transition">
-                            🚀 Sincronizar los 50 Bots con su Nicho Exacto en Hotmart
+                    <form action="/admin/hotmart/connect-account" method="post" class="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
+                        <div class="lg:col-span-5">
+                            <label class="block text-[11px] font-bold text-orange-300 mb-1">
+                                Opción A (Recomendada): Token de Sesión de tu Navegador (`eyJ...`) o Token `Basic` de Hotmart
+                            </label>
+                            <input
+                                type="password"
+                                name="hotmart_session_or_basic"
+                                placeholder="{% if sys_settings.hotmart_basic_auth %}✅ Token guardado (pega uno nuevo para actualizar){% else %}Pega aquí el token copiado desde Hotmart (eyJ... o Basic ...){% endif %}"
+                                class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                            >
+                        </div>
+                        <div class="lg:col-span-2">
+                            <label class="block text-[11px] text-slate-400 mb-1">Client ID / Email (Opcional)</label>
+                            <input
+                                type="text"
+                                name="hotmart_client_id"
+                                value="{{ sys_settings.hotmart_client_id }}"
+                                placeholder="Client ID o Email"
+                                class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                            >
+                        </div>
+                        <div class="lg:col-span-2">
+                            <label class="block text-[11px] text-slate-400 mb-1">Client Secret / Clave (Opcional)</label>
+                            <input
+                                type="password"
+                                name="hotmart_client_secret"
+                                placeholder="{% if sys_settings.hotmart_client_secret %}Guardado{% else %}Client Secret{% endif %}"
+                                class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                            >
+                        </div>
+                        <div class="lg:col-span-3">
+                            <input type="hidden" name="max_clones" value="50">
+                            <button type="submit" class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-slate-950 font-black text-xs transition shadow-lg">
+                                🚀 Buscar en Mercado de Afiliación + Auto-Afiliar y Pasar Links a los 50 Bots
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- AUTO-ASIGNADOR INTELIGENTE CON GEMINI 2.5 FLASH Y AUTO-EXPLORADOR HOTMART -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <form action="/admin/hotmart/bulk-auto-assign" method="post" class="lg:col-span-8 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <label class="block text-xs font-bold text-emerald-400">
+                                🧠 Pegar Lista de HotLinks `go.hotmart.com` en Bloque (Se guardan en sus Bots SIN publicar aún)
+                            </label>
+                            <input type="text" name="default_coupon" placeholder="Cupón global opcional (ej. 50OFF)" class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white w-48">
+                        </div>
+                        <textarea
+                            name="raw_urls_text"
+                            rows="3"
+                            required
+                            placeholder="Pega aquí 5, 20 o 50 enlaces https://go.hotmart.com/... (uno por línea). No tienes que elegir nicho ni escribir título: el sistema extrae los datos y Gemini 2.5 Flash los guarda en la cola del Micro-Bot ideal sin iniciar publicaciones."
+                            class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500"
+                        ></textarea>
+                        <button type="submit" class="py-2.5 px-5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs transition">
+                            🤖 Analizar Enlaces y Guardar en los 50 Micro-Bots (Sin Iniciar Aún)
                         </button>
                     </form>
+
+                    <div class="lg:col-span-4 bg-slate-950/70 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+                        <div>
+                            <h3 class="text-xs font-extrabold text-white mb-1">🌐 Re-Sincronizar Catálogo de Afiliación por Nicho (★ 4.7+ y Alto Margen)</h3>
+                            <p class="text-xs text-slate-400 leading-relaxed mb-3">
+                                Limpia cualquier enlace de compra o búsqueda antigua, obtiene el <code class="text-sky-300">productUcode</code> exacto de cada curso para ir directo al botón de Afiliación de ese producto (y si conectaste tu sesión, extrae el <code class="text-emerald-400">go.hotmart.com</code> solo).
+                            </p>
+                        </div>
+                        <form action="/admin/hotmart/auto-discover" method="post" class="space-y-2">
+                            <input type="hidden" name="max_clones" value="50">
+                            <button type="submit" class="w-full py-2.5 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs transition">
+                                🔄 Actualizar los 50 Bots con Ficha Exacta de Afiliación
+                            </button>
+                        </form>
+                    </div>
                 </div>
             </div>
 
             {% if hotmart_items %}
             <div class="mt-6 pt-5 border-t border-slate-800/80">
                 <h3 class="text-xs font-extrabold uppercase tracking-wider text-orange-300 mb-3">
-                    📦 Productos Asignados por Nicho Exacto ({{ hotmart_items|length }} en cola — Abre en Hotmart para Afiliarte en 1 Clic y pega tu `go.hotmart.com`)
+                    📦 Productos Asignados por Nicho Exacto ({{ hotmart_items|length }} en cola — Abre la ficha exacta del curso en el Mercado de Afiliación o Auto-Afíliate en 1 Clic)
                 </h3>
                 <div class="overflow-x-auto bg-slate-950/80 border border-slate-800 rounded-xl max-h-96 overflow-y-auto">
                     <table class="w-full text-left border-collapse text-xs">
@@ -177,13 +257,14 @@
                             <tr class="border-b border-slate-800 text-slate-400">
                                 <th class="py-2.5 px-3">Micro-Bot / Nicho Coherente</th>
                                 <th class="py-2.5 px-3">Curso / Programa (Calificación y Margen)</th>
-                                <th class="py-2.5 px-3">Afiliación 1-Clic y Tu HotLink</th>
+                                <th class="py-2.5 px-3">Ficha Exacta de Afiliación 1-Clic y Tu HotLink `go.hotmart.com`</th>
                                 <th class="py-2.5 px-3 text-right">Precio Oferta</th>
                                 <th class="py-2.5 px-3 text-center">Quitar</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-800/60">
                             {% for item in hotmart_items %}
+                            {% set raw_prod_id = item.external_item_id.replace('HOT_', '') if item.external_item_id and item.external_item_id.startswith('HOT_') else '' %}
                             <tr class="hover:bg-slate-900/60">
                                 <td class="py-2 px-3 font-mono font-bold text-emerald-400">
                                     {{ item.clone.clone_code if item.clone else item.clone_id }} — {{ item.clone.niche_name[:32] if item.clone else '' }}
@@ -194,21 +275,31 @@
                                 <td class="py-2 px-3">
                                     <div class="flex flex-wrap items-center gap-1.5">
                                         {% if 'go.hotmart.com' in item.hotlink_url %}
-                                        <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono text-[10px]">
-                                            ✅ {{ item.hotlink_url[:32] }}...
-                                        </span>
+                                        <a href="{{ item.hotlink_url }}" target="_blank" class="px-2 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-mono text-[10px] font-bold">
+                                            ✅ {{ item.hotlink_url[:36] }} ↗
+                                        </a>
                                         {% else %}
                                         <a href="{{ item.hotlink_url }}" target="_blank" class="px-2 py-1 rounded bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-500/40 font-bold text-[10px]">
-                                            🤝 1. Afiliarme en Hotmart ↗
+                                            🤝 1. Ir al Curso Exacto para Afiliarme ↗
                                         </a>
+                                        {% if raw_prod_id.isdigit() %}
+                                        <a href="https://app-vlc.hotmart.com/hotlinks/{{ raw_prod_id }}" target="_blank" class="px-2 py-1 rounded bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 font-bold text-[10px]" title="Ver mis HotLinks go.hotmart.com de este producto">
+                                            🔗 Ver Mis HotLinks ↗
+                                        </a>
+                                        <form action="/admin/hotmart/{{ item.id }}/auto-affiliate" method="post" class="inline">
+                                            <button type="submit" class="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-extrabold text-[10px]" title="Auto-afiliarse en 1 clic con tu sesión conectada y extraer go.hotmart.com">
+                                                ⚡ Auto-Tomar Link
+                                            </button>
+                                        </form>
+                                        {% endif %}
                                         {% endif %}
                                         <form action="/admin/hotmart/{{ item.id }}/update-link" method="post" class="inline-flex items-center gap-1">
                                             <input
                                                 type="url"
                                                 name="hotlink_url"
                                                 required
-                                                placeholder="2. Pegar go.hotmart.com/..."
-                                                class="bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-[11px] text-white w-44 font-mono"
+                                                placeholder="Pegar go.hotmart.com/..."
+                                                class="bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-[11px] text-white w-40 font-mono"
                                             >
                                             <button type="submit" class="px-2 py-0.5 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-[10px]">
                                                 💾 Guardar

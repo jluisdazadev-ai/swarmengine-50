@@ -365,6 +365,62 @@ async def admin_bulk_auto_assign_hotlinks(
     )
 
 
+@router.post("/hotmart/connect-account")
+async def admin_connect_hotmart_account_and_sync(
+    request: Request,
+    hotmart_session_or_basic: str = Form(""),
+    hotmart_client_id: str = Form(""),
+    hotmart_client_secret: str = Form(""),
+    max_clones: int = Form(50),
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """
+    Guarda las credenciales o el Token de Sesión de la cuenta de Hotmart del usuario,
+    entra directamente al **Mercado de Afiliación (`Productos -> Afiliarse a un producto`)**,
+    busca cursos 100% coherentes con el nicho de cada bot (★ 4.7+, 50%-80% comisión, Afiliación Inmediata 1-Clic),
+    solicita la auto-afiliación automática y extrae el enlace `https://go.hotmart.com/XXXX` para cada bot.
+    """
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    from app.services.hotmart_sync import (
+        auto_discover_hotmart_catalog_for_clones,
+        resolve_hotmart_bearer_token,
+    )
+
+    sys_settings = await ensure_system_settings(session)
+    if hotmart_session_or_basic.strip():
+        sys_settings.hotmart_basic_auth = hotmart_session_or_basic.strip()
+    if hotmart_client_id.strip():
+        sys_settings.hotmart_client_id = hotmart_client_id.strip()
+    if hotmart_client_secret.strip():
+        sys_settings.hotmart_client_secret = hotmart_client_secret.strip()
+    await session.commit()
+
+    bearer_token = await resolve_hotmart_bearer_token(sys_settings)
+    count = await auto_discover_hotmart_catalog_for_clones(
+        session=session,
+        max_clones_to_scan=max(1, min(max_clones, 50)),
+        reset_incoherent=True,
+    )
+
+    if bearer_token:
+        return RedirectResponse(
+            url=(
+                f"/admin?msg=Cuenta+Hotmart+Conectada:+{count}+cursos+del+Mercado+de+Afiliacion+"
+                "sincronizados+con+Auto-Afiliacion+1-Clic+y+extraccion+de+go.hotmart.com"
+            ),
+            status_code=302,
+        )
+    return RedirectResponse(
+        url=(
+            f"/admin?msg=Asignadas+{count}+fichas+directas+de+Afiliacion+exacta+en+Hotmart+"
+            "(Pega+tu+Token+de+Sesion+de+Hotmart+para+Auto-Afiliacion+1-Clic+automatica)"
+        ),
+        status_code=302,
+    )
+
+
 @router.post("/hotmart/auto-discover")
 async def admin_auto_discover_hotmart_catalog(
     request: Request,
@@ -372,9 +428,10 @@ async def admin_auto_discover_hotmart_catalog(
     session: AsyncSession = Depends(get_db_session),
 ) -> RedirectResponse:
     """
-    Limpia productos que no coincidan con el nicho de su bot, entra al catálogo de Hotmart Marketplace
-    filtrando por alta calificación (★ 4.7+), alto margen (50%-80% USD) y afiliación inmediata 1-clic,
-    y asigna productos 100% coherentes a cada Micro-Bot.
+    Limpia enlaces del marketplace de compra o pantallas de búsqueda genéricas (`?q=`),
+    busca en el Mercado de Afiliación de Hotmart cursos con alta calificación (★ 4.7+),
+    alto margen (50%-80% USD) y afiliación inmediata 1-clic, se auto-afilia si hay sesión activa
+    y guarda la ficha exacta de afiliación o el `go.hotmart.com` en cada Micro-Bot.
     """
     if not is_admin_authenticated(request):
         raise HTTPException(status_code=401, detail="No autorizado.")
@@ -387,7 +444,34 @@ async def admin_auto_discover_hotmart_catalog(
         reset_incoherent=True,
     )
     return RedirectResponse(
-        url=f"/admin?msg=Sincronizados+{count}+productos+100%25+coherentes+por+nicho+(Alta+Calificacion+y+Margen)+en+los+Bots",
+        url=f"/admin?msg=Sincronizados+{count}+cursos+en+Mercado+de+Afiliacion+Hotmart+con+ficha+exacta+del+producto",
+        status_code=302,
+    )
+
+
+@router.post("/hotmart/{pool_id}/auto-affiliate")
+async def admin_auto_affiliate_single_product(
+    pool_id: int,
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """Solicita afiliación 1-Clic en Hotmart para este producto y extrae automáticamente su `go.hotmart.com/...`."""
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    from app.services.hotmart_sync import auto_affiliate_single_pool_item
+
+    go_link = await auto_affiliate_single_pool_item(session=session, pool_id=pool_id)
+    if go_link:
+        return RedirectResponse(
+            url=f"/admin?msg=Auto-Afiliacion+1-Clic+exitosa:+HotLink+{go_link}+asignado+al+Bot",
+            status_code=302,
+        )
+    return RedirectResponse(
+        url=(
+            "/admin?msg=Para+extraer+el+go.hotmart.com+automaticamente,+pega+tu+Token+de+Sesion+"
+            "de+Hotmart+arriba+o+usa+el+boton+Ir+al+Producto+para+Afiliarme"
+        ),
         status_code=302,
     )
 
