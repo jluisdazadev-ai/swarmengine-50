@@ -443,10 +443,18 @@ async def trigger_clone_manual_execution(
     if request.headers.get("HX-Request") == "true":
         if status == "published":
             short_code = result.get("short_code", "")
+            tg_ok = bool(result.get("published_telegram"))
+            tg_err = str(result.get("telegram_error", ""))[:65]
+            tg_badge = (
+                '<span class="px-2 py-0.5 text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40 rounded">✈️ Telegram OK ✅</span>'
+                if tg_ok
+                else f'<span class="px-2 py-0.5 text-[10px] font-medium bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded" title="{tg_err}">⚠️ TG: {tg_err or "Pendiente"}</span>'
+            )
             return HTMLResponse(
                 content=(
                     f'<div class="flex flex-col items-center gap-1">'
-                    f'<span class="px-2 py-0.5 text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded">✅ ¡Publicada!</span>'
+                    f'<span class="px-2 py-0.5 text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded">✅ Web Publicada</span>'
+                    f'{tg_badge}'
                     f'<a href="/c/{clone.pseo_category_slug}" target="_blank" class="text-[11px] text-sky-400 hover:underline">Ver en Portal ↗</a>'
                     f'<span class="text-[10px] text-slate-400 font-mono">/go/{short_code}</span>'
                     f'</div>'
@@ -471,6 +479,66 @@ async def trigger_clone_manual_execution(
         url=f"/admin?msg=Resultado+{clone.clone_code}:+{status}",
         status_code=302,
     )
+
+
+@router.post("/offers/{offer_id}/send-telegram")
+async def send_existing_offer_to_telegram(
+    offer_id: int,
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """Reenvía en 1 clic una oferta ya publicada en la web hacia el Canal de Telegram del bot."""
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    from app.services.affiliate import build_public_shortlink
+    from app.services.image_card import generate_offer_card
+    from app.services.publisher import publish_offer_to_telegram
+
+    sys_settings = await ensure_system_settings(session)
+    offer = (
+        await session.execute(
+            select(ProductOffer)
+            .options(selectinload(ProductOffer.clone))
+            .where(ProductOffer.id == offer_id)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if offer is None or offer.clone is None:
+        return RedirectResponse(url="/admin?msg=Oferta+no+encontrada", status_code=302)
+
+    card_buffer, _ = await generate_offer_card(
+        image_url=offer.image_url,
+        hook_headline=f"OFERTA -{int(round(offer.discount_percent))}% HOY",
+        original_price=offer.original_price,
+        sale_price=offer.sale_price,
+        discount_percent=offer.discount_percent,
+        currency=offer.currency,
+        niche_name=offer.clone.niche_name,
+        short_code=offer.short_code,
+    )
+    short_link = build_public_shortlink(offer.short_code, sys_settings=sys_settings)
+
+    try:
+        await publish_offer_to_telegram(
+            card_buffer=card_buffer,
+            caption_html=offer.ai_telegram_caption,
+            short_link=short_link,
+            clone=offer.clone,
+            sys_settings=sys_settings,
+        )
+        offer.published_telegram = True
+        await session.commit()
+        return RedirectResponse(
+            url=f"/admin?msg=Oferta+enviada+exitosamente+a+Telegram+({offer.clone.telegram_channel_id})",
+            status_code=302,
+        )
+    except Exception as exc:
+        err_clean = str(exc).replace(" ", "+")[:120]
+        return RedirectResponse(
+            url=f"/admin?msg=Error+Telegram:+{err_clean}",
+            status_code=302,
+        )
 
 
 @router.post("/clones/{clone_id}/commission")

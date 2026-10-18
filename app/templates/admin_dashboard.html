@@ -292,7 +292,11 @@
                                 {% if off.published_telegram %}
                                 <span class="px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">Telegram ✅</span>
                                 {% else %}
-                                <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-400" title="Falta configurar Telegram Bot Token o hacer el bot Admin del canal">Telegram ⏸️</span>
+                                <form action="/admin/offers/{{ off.id }}/send-telegram" method="post" class="inline">
+                                    <button type="submit" class="px-2 py-0.5 rounded bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-[11px] transition">
+                                        ✈️ Enviar a Telegram Ahora
+                                    </button>
+                                </form>
                                 {% endif %}
                             </td>
                             <td class="py-2.5 px-4 text-right space-x-2">

@@ -203,8 +203,13 @@ async def execute_clone_pipeline(clone_id: int, force_manual: bool = False) -> D
                 await cache_shortlink_in_redis(offer)
 
                 # Publicación en Telegram
+                telegram_error = ""
                 tg_token = (sys_settings.telegram_bot_token or settings.telegram_bot_token).strip()
-                if tg_token and clone.telegram_channel_id:
+                if not tg_token:
+                    telegram_error = "Falta configurar Telegram Bot Token en Configuración Global"
+                elif not clone.telegram_channel_id:
+                    telegram_error = "Falta asignar Canal de Telegram al bot"
+                else:
                     try:
                         await publish_offer_to_telegram(
                             card_buffer=card_buffer,
@@ -215,6 +220,7 @@ async def execute_clone_pipeline(clone_id: int, force_manual: bool = False) -> D
                         )
                         offer.published_telegram = True
                     except Exception as tg_exc:
+                        telegram_error = str(tg_exc)
                         logger.warning("[%s] No se pudo publicar en Telegram: %s", clone.clone_code, tg_exc)
 
                 # Publicación en WhatsApp (Evolution API)
@@ -259,6 +265,8 @@ async def execute_clone_pipeline(clone_id: int, force_manual: bool = False) -> D
                     "short_code": offer.short_code,
                     "title": offer.title,
                     "discount_percent": float(offer.discount_percent),
+                    "published_telegram": offer.published_telegram,
+                    "telegram_error": telegram_error,
                 }
 
         finally:

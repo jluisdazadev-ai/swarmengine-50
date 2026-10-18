@@ -127,34 +127,48 @@ async def publish_offer_to_telegram(
         "reply_markup": json.dumps(reply_markup),
     }
 
-    timeout = httpx.Timeout(connect=10.0, read=25.0, write=20.0, pool=10.0)
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.post(url, data=data, files=files)
-        if response.status_code != 200 and sys_settings and sys_settings.admin_telegram_chat_id.strip():
-            fallback_chat = sys_settings.admin_telegram_chat_id.strip()
-            if fallback_chat != chat_id:
-                logger.info(
-                    "[%s] Canal %s no encontrado; enviando al Canal Maestro %s",
-                    clone.clone_code,
-                    chat_id,
-                    fallback_chat,
-                )
-                data["chat_id"] = fallback_chat
-                files = {
-                    "photo": (f"{clone.clone_code}_offer.jpg", card_buffer.getvalue(), "image/jpeg"),
-                }
-                response = await client.post(url, data=data, files=files)
+    candidate_chat_ids = [chat_id]
+    if chat_id.startswith("-100") and len(chat_id) > 4:
+        candidate_chat_ids.append("-" + chat_id[4:])
+    elif chat_id.startswith("-") and not chat_id.startswith("-100"):
+        candidate_chat_ids.append("-100" + chat_id[1:])
 
-        if response.status_code >= 500 or response.status_code == 429:
-            response.raise_for_status()
-        if response.status_code != 200:
-            logger.error(
-                "[%s] Error de Telegram Bot API (%d): %s",
+    if sys_settings and sys_settings.admin_telegram_chat_id.strip():
+        master_chat = sys_settings.admin_telegram_chat_id.strip()
+        if master_chat not in candidate_chat_ids:
+            candidate_chat_ids.append(master_chat)
+            if master_chat.startswith("-100") and len(master_chat) > 4:
+                candidate_chat_ids.append("-" + master_chat[4:])
+            elif master_chat.startswith("-") and not master_chat.startswith("-100"):
+                candidate_chat_ids.append("-100" + master_chat[1:])
+
+    timeout = httpx.Timeout(connect=10.0, read=25.0, write=20.0, pool=10.0)
+    last_error_desc = ""
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = None
+        for target_chat in candidate_chat_ids:
+            data["chat_id"] = target_chat
+            files = {
+                "photo": (f"{clone.clone_code}_offer.jpg", card_buffer.getvalue(), "image/jpeg"),
+            }
+            response = await client.post(url, data=data, files=files)
+            if response.status_code == 200:
+                break
+            try:
+                err_json = response.json()
+                last_error_desc = str(err_json.get("description") or response.text)
+            except Exception:
+                last_error_desc = response.text
+            logger.warning(
+                "[%s] Intento Telegram chat_id=%s devolvió %d: %s",
                 clone.clone_code,
+                target_chat,
                 response.status_code,
-                response.text,
+                last_error_desc,
             )
-            response.raise_for_status()
+
+        if response is None or response.status_code != 200:
+            raise RuntimeError(f"Telegram API ({response.status_code if response else 'ERR'}): {last_error_desc}")
         result = response.json()
 
     logger.info(

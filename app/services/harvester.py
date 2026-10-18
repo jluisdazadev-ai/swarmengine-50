@@ -90,13 +90,14 @@ async def is_item_recently_published(
 ) -> bool:
     """
     Verifica en PostgreSQL (ProductOffer) si ese external_item_id ya fue publicado
-    por ese clon dentro de la ventana de enfriamiento (por defecto 15 días).
+    por ese clon Y enviado a Telegram dentro de la ventana de enfriamiento (por defecto 15 días).
+    Si la oferta aún no pudo enviarse a Telegram (published_telegram=False), permite reintentarla.
     """
     days = cooldown_days if cooldown_days is not None else settings.duplicate_cooldown_days
     cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
 
     stmt = (
-        select(ProductOffer.id, ProductOffer.detected_at)
+        select(ProductOffer.id, ProductOffer.detected_at, ProductOffer.published_telegram)
         .where(
             ProductOffer.clone_id == clone_id,
             ProductOffer.external_item_id == external_item_id,
@@ -105,6 +106,10 @@ async def is_item_recently_published(
     )
     row = (await session.execute(stmt)).first()
     if row is None:
+        return False
+
+    published_telegram: bool = bool(row[2])
+    if not published_telegram:
         return False
 
     detected_at: datetime = row[1]
