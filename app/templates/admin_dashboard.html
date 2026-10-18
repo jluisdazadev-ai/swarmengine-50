@@ -152,15 +152,15 @@
 
                 <div class="lg:col-span-4 bg-slate-950/70 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
                     <div>
-                        <h3 class="text-xs font-extrabold text-white mb-1">🌐 Auto-Explorador del Mercado Hotmart</h3>
+                        <h3 class="text-xs font-extrabold text-white mb-1">🌐 Auto-Explorador Coherente por Nicho (★ 4.7+ y Alto Margen)</h3>
                         <p class="text-xs text-slate-400 leading-relaxed mb-3">
-                            Hace que el sistema entre por sí solo al catálogo de Hotmart en español, busque cursos/infoproductos para cada nicho y los guarde en la cola de tus bots.
+                            Limpia cualquier producto mal asignado, busca en Hotmart por el tema exacto de cada bot (priorizando ★ 4.7+ y 50%-80% de comisión con afiliación inmediata) y los guarda en sus colas.
                         </p>
                     </div>
                     <form action="/admin/hotmart/auto-discover" method="post" class="space-y-2">
-                        <input type="hidden" name="max_clones" value="20">
+                        <input type="hidden" name="max_clones" value="50">
                         <button type="submit" class="w-full py-2.5 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs transition">
-                            🚀 Auto-Explorar Hotmart y Guardar en Cola
+                            🚀 Sincronizar los 50 Bots con su Nicho Exacto en Hotmart
                         </button>
                     </form>
                 </div>
@@ -169,30 +169,52 @@
             {% if hotmart_items %}
             <div class="mt-6 pt-5 border-t border-slate-800/80">
                 <h3 class="text-xs font-extrabold uppercase tracking-wider text-orange-300 mb-3">
-                    📦 Productos Guardados en la Cola de tus Micro-Bots ({{ hotmart_items|length }} recientes — Listos para cuando actives los bots)
+                    📦 Productos Asignados por Nicho Exacto ({{ hotmart_items|length }} en cola — Abre en Hotmart para Afiliarte en 1 Clic y pega tu `go.hotmart.com`)
                 </h3>
-                <div class="overflow-x-auto bg-slate-950/80 border border-slate-800 rounded-xl">
+                <div class="overflow-x-auto bg-slate-950/80 border border-slate-800 rounded-xl max-h-96 overflow-y-auto">
                     <table class="w-full text-left border-collapse text-xs">
-                        <thead>
+                        <thead class="sticky top-0 bg-slate-950">
                             <tr class="border-b border-slate-800 text-slate-400">
-                                <th class="py-2.5 px-3">Micro-Bot Asignado</th>
-                                <th class="py-2.5 px-3">Producto Extraído</th>
-                                <th class="py-2.5 px-3">HotLink Guardado</th>
+                                <th class="py-2.5 px-3">Micro-Bot / Nicho Coherente</th>
+                                <th class="py-2.5 px-3">Curso / Programa (Calificación y Margen)</th>
+                                <th class="py-2.5 px-3">Afiliación 1-Clic y Tu HotLink</th>
                                 <th class="py-2.5 px-3 text-right">Precio Oferta</th>
-                                <th class="py-2.5 px-3 text-center">Acción</th>
+                                <th class="py-2.5 px-3 text-center">Quitar</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-800/60">
                             {% for item in hotmart_items %}
                             <tr class="hover:bg-slate-900/60">
                                 <td class="py-2 px-3 font-mono font-bold text-emerald-400">
-                                    {{ item.clone.clone_code if item.clone else item.clone_id }} — {{ item.clone.niche_name[:28] if item.clone else '' }}
+                                    {{ item.clone.clone_code if item.clone else item.clone_id }} — {{ item.clone.niche_name[:32] if item.clone else '' }}
                                 </td>
-                                <td class="py-2 px-3 text-slate-200 font-medium truncate max-w-xs">
+                                <td class="py-2 px-3 text-slate-200 font-medium max-w-xs truncate" title="{{ item.title }}">
                                     {{ item.title }}
                                 </td>
-                                <td class="py-2 px-3 font-mono text-slate-400 truncate max-w-xs">
-                                    <a href="{{ item.hotlink_url }}" target="_blank" class="hover:text-orange-300">{{ item.hotlink_url[:45] }}...</a>
+                                <td class="py-2 px-3">
+                                    <div class="flex flex-wrap items-center gap-1.5">
+                                        {% if 'go.hotmart.com' in item.hotlink_url %}
+                                        <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono text-[10px]">
+                                            ✅ {{ item.hotlink_url[:32] }}...
+                                        </span>
+                                        {% else %}
+                                        <a href="{{ item.hotlink_url }}" target="_blank" class="px-2 py-1 rounded bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-500/40 font-bold text-[10px]">
+                                            🤝 1. Afiliarme en Hotmart ↗
+                                        </a>
+                                        {% endif %}
+                                        <form action="/admin/hotmart/{{ item.id }}/update-link" method="post" class="inline-flex items-center gap-1">
+                                            <input
+                                                type="url"
+                                                name="hotlink_url"
+                                                required
+                                                placeholder="2. Pegar go.hotmart.com/..."
+                                                class="bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-[11px] text-white w-44 font-mono"
+                                            >
+                                            <button type="submit" class="px-2 py-0.5 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-[10px]">
+                                                💾 Guardar
+                                            </button>
+                                        </form>
+                                    </div>
                                 </td>
                                 <td class="py-2 px-3 text-right font-mono font-bold text-emerald-400">
                                     ${{ "%.2f"|format(item.sale_price) }} {{ item.currency }} (-{{ item.discount_percent|round|int }}%)
@@ -200,7 +222,7 @@
                                 <td class="py-2 px-3 text-center">
                                     <form action="/admin/hotmart/{{ item.id }}/delete" method="post" class="inline">
                                         <button type="submit" class="px-2 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-[11px]">
-                                            Quitar
+                                            ✕
                                         </button>
                                     </form>
                                 </td>
@@ -210,6 +232,67 @@
                     </table>
                 </div>
             </div>
+            {% endif %}
+        </section>
+
+        <!-- RADAR SPIDER CAZADOR DE COMPRADORES Y SEMBRADOR DE COOKIES (60 DÍAS) -->
+        <section class="bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/30 border border-emerald-500/30 rounded-2xl p-6">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+                <div>
+                    <span class="inline-block text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 mb-1">
+                        🕷️ Modo Spider Activo + Sembrador de Cookies Hotmart (60 Días)
+                    </span>
+                    <h2 class="text-lg font-extrabold text-white">Radar Cazador de Personas Buscando Cursos y Oficios en Vivo</h2>
+                    <p class="text-xs text-slate-300 mt-0.5">
+                        Los bots salen como arañas (`spiders`) a rastrear foros y comunidades en español donde personas reales preguntan cómo aprender los oficios de tus bots, y te preparan la respuesta exacta con tu link <code class="text-emerald-400">/go/XXXXXX</code> para clavarles tu Cookie de 60 días.
+                    </p>
+                </div>
+                <form action="/admin/spider/run" method="post" class="shrink-0">
+                    <button type="submit" class="py-3 px-5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-lg transition">
+                        🕷️ Lanzar Spider Cazador de Compradores Ahora
+                    </button>
+                </form>
+            </div>
+
+            {% if spider_leads %}
+            <div class="overflow-x-auto bg-slate-950/90 border border-slate-800 rounded-xl mt-3">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead>
+                        <tr class="border-b border-slate-800 text-slate-400 uppercase">
+                            <th class="py-2.5 px-3">Bot / Nicho</th>
+                            <th class="py-2.5 px-3">Persona / Pregunta Detectada en Vivo</th>
+                            <th class="py-2.5 px-3">Respuesta Lista con tu Link Sembrador de Cookie</th>
+                            <th class="py-2.5 px-3 text-center">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/70">
+                        {% for lead in spider_leads %}
+                        <tr class="hover:bg-slate-900/60">
+                            <td class="py-2.5 px-3 font-mono font-bold text-emerald-400 whitespace-nowrap">
+                                {{ lead.clone_code }}<br>
+                                <span class="text-[10px] text-slate-400 font-sans">{{ lead.platform }}</span>
+                            </td>
+                            <td class="py-2.5 px-3 text-white font-semibold max-w-xs">
+                                <div class="text-[11px] text-amber-300">{{ lead.author }} pregunta:</div>
+                                <div>"{{ lead.question_title }}"</div>
+                            </td>
+                            <td class="py-2.5 px-3">
+                                <textarea readonly rows="2" onclick="this.select();navigator.clipboard.writeText(this.value);" class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-[11px] text-slate-200 cursor-pointer" title="Haz clic para copiar la respuesta con tu link sembrador de cookie">{{ lead.suggested_reply }}</textarea>
+                            </td>
+                            <td class="py-2.5 px-3 text-center whitespace-nowrap">
+                                <a href="{{ lead.thread_url }}" target="_blank" rel="noopener" class="inline-block px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-[11px]">
+                                    🎯 Ir al Hilo y Sembrar Cookie ↗
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-xs text-slate-400 italic">
+                Haz clic en <strong>"🕷️ Lanzar Spider Cazador de Compradores Ahora"</strong> para que tus bots rastreen conversaciones reales de personas interesadas en los temas de tus ofertas publicadas.
+            </p>
             {% endif %}
         </section>
 
@@ -377,7 +460,7 @@
                             <th class="py-3.5 px-4 text-right">Clics Acum.</th>
                             <th class="py-3.5 px-4 text-right">Gasto Gemini USD</th>
                             <th class="py-3.5 px-4 text-right">Comisiones USD</th>
-                            <th class="py-3.5 px-4 text-center">Acción 1-Clic</th>
+                            <th class="py-3.5 px-4 text-center">Estado Publicación / Acción</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-800/70">
@@ -421,7 +504,32 @@
                                 ${{ "%.2f"|format(row.commissions_usd) }}
                             </td>
                             <td class="py-3.5 px-4 text-center">
-                                <div id="run-btn-{{ clone.id }}">
+                                <div id="run-btn-{{ clone.id }}" class="flex flex-col items-center gap-1">
+                                    {% if row.last_offer %}
+                                    <div class="flex flex-wrap items-center justify-center gap-1">
+                                        <span class="px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded">✅ Web OK</span>
+                                        {% if row.last_offer.published_telegram %}
+                                        <span class="px-2 py-0.5 text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40 rounded">✈️ TG OK</span>
+                                        {% else %}
+                                        <form action="/admin/offers/{{ row.last_offer.id }}/send-telegram" method="post" class="inline">
+                                            <button type="submit" class="px-1.5 py-0.5 rounded bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-[10px]">
+                                                ✈️ Enviar TG
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                    </div>
+                                    <div class="flex items-center gap-2 text-[10px]">
+                                        <a href="/c/{{ clone.pseo_category_slug }}" target="_blank" class="text-sky-400 hover:underline font-semibold">Portal ↗</a>
+                                        <a href="/go/{{ row.last_offer.short_code }}" target="_blank" class="font-mono text-orange-300 hover:underline">/go/{{ row.last_offer.short_code }}</a>
+                                    </div>
+                                    <button
+                                        hx-post="/admin/clones/{{ clone.id }}/run"
+                                        hx-target="#run-btn-{{ clone.id }}"
+                                        hx-swap="innerHTML"
+                                        class="mt-0.5 px-2.5 py-1 text-[10px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded transition">
+                                        🔄 Publicar Otra
+                                    </button>
+                                    {% else %}
                                     <button
                                         hx-post="/admin/clones/{{ clone.id }}/run"
                                         hx-target="#run-btn-{{ clone.id }}"
@@ -429,6 +537,7 @@
                                         class="px-3 py-1.5 text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg transition">
                                         ▶ Ejecutar Ahora
                                     </button>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>

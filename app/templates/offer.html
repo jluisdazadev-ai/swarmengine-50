@@ -5,6 +5,7 @@
 {% block canonical %}<link rel="canonical" href="{{ canonical_url }}">{% endblock %}
 
 {% block head_extra %}
+<link rel="prefetch" href="/go/{{ offer.short_code }}">
 <script type="application/ld+json">
 {{ schema_json_ld|safe }}
 </script>
@@ -97,7 +98,7 @@
 </section>
 
 {% if related_offers %}
-<section>
+<section class="mb-20">
     <h2 class="text-lg font-bold text-white mb-4">Más ofertas recientes en {{ clone.niche_name }}</h2>
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {% for rel in related_offers %}
@@ -113,4 +114,20 @@
     </div>
 </section>
 {% endif %}
+
+<!-- Barra Flotante Sembradora de Cookie de 60 Días -->
+<div class="fixed bottom-0 inset-x-0 z-50 bg-slate-950/95 backdrop-blur border-t border-emerald-500/40 px-4 py-3 shadow-2xl">
+    <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+            <span class="px-2.5 py-1 rounded-full bg-rose-600 text-white text-xs font-black">-{{ offer.discount_percent|round|int }}% HOY</span>
+            <div>
+                <p class="text-xs sm:text-sm font-bold text-white truncate max-w-md">{{ offer.title }}</p>
+                <p class="text-[11px] text-emerald-400 font-semibold">Precio especial verificado: {{ format_currency(offer.sale_price, offer.currency) }} · Garantía 7 días</p>
+            </div>
+        </div>
+        <a href="/go/{{ offer.short_code }}" target="_blank" rel="nofollow noopener" class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm text-center shadow-lg transition">
+            🔥 Activar Cupón Oficial (-{{ offer.discount_percent|round|int }}% OFF) e Ir al Curso ↗
+        </a>
+    </div>
+</div>
 {% endblock %}

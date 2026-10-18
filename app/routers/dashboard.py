@@ -175,18 +175,31 @@ async def admin_dashboard_view(
             }
         )
 
+    from app.services.spider_hunter import get_cached_spider_leads
+
+    all_offers_stmt = select(ProductOffer).order_by(desc(ProductOffer.detected_at))
+    all_offers_list = list((await session.execute(all_offers_stmt)).scalars().all())
+    last_offer_by_clone: Dict[int, ProductOffer] = {}
+    for off in all_offers_list:
+        if off.clone_id not in last_offer_by_clone:
+            last_offer_by_clone[off.clone_id] = off
+
+    for item in clone_table:
+        cid = item["clone"].id
+        item["last_offer"] = last_offer_by_clone.get(cid)
+
     top_chart_clones = sorted(clone_table, key=lambda x: x["total_clicks"], reverse=True)[:10]
     chart_labels = [item["clone"].clone_code for item in top_chart_clones]
     chart_clicks = [item["total_clicks"] for item in top_chart_clones]
     chart_commissions = [float(item["commissions_usd"]) for item in top_chart_clones]
 
-    total_offers_db = (await session.execute(select(func.count(ProductOffer.id)))).scalar_one() or 0
+    total_offers_db = len(all_offers_list)
 
     hotmart_stmt = (
         select(HotmartProductPool)
         .options(selectinload(HotmartProductPool.clone))
-        .order_by(desc(HotmartProductPool.id))
-        .limit(20)
+        .order_by(HotmartProductPool.clone_id.asc(), desc(HotmartProductPool.id))
+        .limit(50)
     )
     hotmart_items = list((await session.execute(hotmart_stmt)).scalars().all())
 
@@ -206,6 +219,7 @@ async def admin_dashboard_view(
             "clone_table": clone_table,
             "hotmart_items": hotmart_items,
             "recent_offers": recent_offers,
+            "spider_leads": get_cached_spider_leads(),
             "total_clones": len(clone_table),
             "active_bots_count": active_bots_count,
             "global_clicks": global_clicks,
@@ -354,12 +368,13 @@ async def admin_bulk_auto_assign_hotlinks(
 @router.post("/hotmart/auto-discover")
 async def admin_auto_discover_hotmart_catalog(
     request: Request,
-    max_clones: int = Form(15),
+    max_clones: int = Form(50),
     session: AsyncSession = Depends(get_db_session),
 ) -> RedirectResponse:
     """
-    Entra automáticamente al catálogo de Hotmart Marketplace, busca productos ganadores
-    para los Micro-Bots y los asigna sin intervención manual.
+    Limpia productos que no coincidan con el nicho de su bot, entra al catálogo de Hotmart Marketplace
+    filtrando por alta calificación (★ 4.7+), alto margen (50%-80% USD) y afiliación inmediata 1-clic,
+    y asigna productos 100% coherentes a cada Micro-Bot.
     """
     if not is_admin_authenticated(request):
         raise HTTPException(status_code=401, detail="No autorizado.")
@@ -369,9 +384,61 @@ async def admin_auto_discover_hotmart_catalog(
     count = await auto_discover_hotmart_catalog_for_clones(
         session=session,
         max_clones_to_scan=max(1, min(max_clones, 50)),
+        reset_incoherent=True,
     )
     return RedirectResponse(
-        url=f"/admin?msg=Auto-Explorador+Hotmart+asigno+{count}+productos+nuevos+a+los+Micro-Bots",
+        url=f"/admin?msg=Sincronizados+{count}+productos+100%25+coherentes+por+nicho+(Alta+Calificacion+y+Margen)+en+los+Bots",
+        status_code=302,
+    )
+
+
+@router.post("/hotmart/{pool_id}/update-link")
+async def update_hotmart_pool_link(
+    pool_id: int,
+    request: Request,
+    hotlink_url: str = Form(...),
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """Permite pegar en 1 clic el HotLink personal `go.hotmart.com/...` tras afiliarse en 1 clic al producto."""
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    item = (
+        await session.execute(select(HotmartProductPool).where(HotmartProductPool.id == pool_id).limit(1))
+    ).scalar_one_or_none()
+    if item is not None and hotlink_url.strip():
+        clean_link = hotlink_url.strip()
+        item.hotlink_url = clean_link
+        try:
+            meta = await extract_live_hotmart_metadata(clean_link)
+            if meta.get("title"):
+                item.title = str(meta["title"])[:500]
+            if meta.get("image_url"):
+                item.image_url = str(meta["image_url"])
+        except Exception as exc:
+            logger.debug("No se pudo extraer metadata live para %s: %s", clean_link, exc)
+        await session.commit()
+
+    return RedirectResponse(
+        url="/admin?msg=Tu+HotLink+personal+de+afiliado+fue+guardado+en+el+Bot",
+        status_code=302,
+    )
+
+
+@router.post("/spider/run")
+async def trigger_spider_buyer_hunter(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """Dispara el Spider Cazador de Intención de Compra para buscar personas preguntando por tus nichos y preparar links sembradores de cookies."""
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    from app.services.spider_hunter import run_spider_buyer_hunter
+
+    leads = await run_spider_buyer_hunter(session=session, max_bots=10)
+    return RedirectResponse(
+        url=f"/admin?msg=Spider+Cazador+encontro+{len(leads)}+conversaciones+de+compradores+potenciales+para+sembrar+cookies",
         status_code=302,
     )
 
