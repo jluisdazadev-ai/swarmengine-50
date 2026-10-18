@@ -201,15 +201,97 @@ async def extract_live_hotmart_metadata(target_url: str) -> Dict[str, Any]:
                 offers_node = ld_obj.get("offers")
                 if isinstance(offers_node, dict) and offers_node.get("price"):
                     extracted_price = Decimal(str(offers_node["price"]))
-                    currency = str(offers_node.get("priceCurrency") or "USD")
+                    currency = str(offers_node.get("priceCurrency") or "USD").upper()
         except Exception:
             continue
+
+    # 4. Intentar extraer precio exacto desde __NUXT_DATA__ (Checkout pay.hotmart.com)
+    nuxt_match = re.search(
+        r'<script[^>]+id=["\']__NUXT_DATA__["\'][^>]*>(.*?)</script>',
+        body,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if nuxt_match and extracted_price is None:
+        try:
+            nuxt_data = json.loads(nuxt_match.group(1))
+            if isinstance(nuxt_data, list):
+                for item in nuxt_data:
+                    if isinstance(item, dict) and "value" in item and "currency" in item:
+                        v_idx = item["value"]
+                        c_idx = item["currency"]
+                        if isinstance(v_idx, int) and v_idx < len(nuxt_data) and isinstance(nuxt_data[v_idx], (int, float)):
+                            extracted_price = Decimal(str(round(float(nuxt_data[v_idx]), 2)))
+                            if isinstance(c_idx, int) and c_idx < len(nuxt_data) and isinstance(nuxt_data[c_idx], str):
+                                currency = nuxt_data[c_idx].upper()
+                            break
+                        elif isinstance(v_idx, (int, float)) and v_idx > 0:
+                            extracted_price = Decimal(str(round(float(v_idx), 2)))
+                            if isinstance(c_idx, str):
+                                currency = c_idx.upper()
+                            break
+        except Exception:
+            pass
+
+    # 5. Intentar extraer precio desde __NEXT_DATA__ (hotmart.com marketplace)
+    next_match = re.search(
+        r'<script[^>]+id=["\']__NEXT_DATA__["\'][^>]*>(.*?)</script>',
+        body,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if next_match and extracted_price is None:
+        try:
+            next_data = json.loads(next_match.group(1))
+            p_prod = next_data.get("props", {}).get("pageProps", {}).get("profile", {}).get("product", {})
+            p_price = p_prod.get("price") or {}
+            if isinstance(p_price, dict) and p_price.get("value"):
+                extracted_price = Decimal(str(round(float(p_price["value"]), 2)))
+                currency = str(p_price.get("currency") or "USD").upper()
+        except Exception:
+            pass
+
+    # 6. Si no hay precio aún y la página de ventas contiene enlace directo a checkout de Hotmart
+    if extracted_price is None:
+        checkout_match = re.search(r'https://pay\.hotmart\.com/([A-Za-z0-9_-]+)', body)
+        if checkout_match:
+            pay_ref = checkout_match.group(1)
+            try:
+                pay_resp = await client.get(f"https://pay.hotmart.com/{pay_ref}")
+                if pay_resp.status_code == 200:
+                    pay_nuxt = re.search(
+                        r'<script[^>]+id=["\']__NUXT_DATA__["\'][^>]*>(.*?)</script>',
+                        pay_resp.text,
+                        flags=re.IGNORECASE | re.DOTALL,
+                    )
+                    if pay_nuxt:
+                        p_data = json.loads(pay_nuxt.group(1))
+                        if isinstance(p_data, list):
+                            for p_it in p_data:
+                                if isinstance(p_it, dict) and "value" in p_it and "currency" in p_it:
+                                    v_idx = p_it["value"]
+                                    c_idx = p_it["currency"]
+                                    if isinstance(v_idx, int) and v_idx < len(p_data) and isinstance(p_data[v_idx], (int, float)):
+                                        extracted_price = Decimal(str(round(float(p_data[v_idx]), 2)))
+                                        if isinstance(c_idx, int) and c_idx < len(p_data) and isinstance(p_data[c_idx], str):
+                                            currency = p_data[c_idx].upper()
+                                        break
+            except Exception:
+                pass
+
+    is_portuguese = False
+    norm_url = str(response.url).lower()
+    if any(ind in norm_url for ind in ("/pt-br/", ".com.br", "/br/")) or currency == "BRL":
+        is_portuguese = True
+    else:
+        comb = f"{title}".lower()
+        if any(pt in comb for pt in ("você", "voce", "não", "nao", "são", "também", "aulas", "do zero ao", "brasil", "r$", "reais")):
+            is_portuguese = True
 
     return {
         "title": title,
         "image_url": image_url,
         "sale_price": extracted_price,
         "currency": currency,
+        "is_portuguese": is_portuguese,
         "final_url": str(response.url),
     }
 
@@ -324,6 +406,10 @@ class HotmartHarvester(BaseMarketplaceHarvester):
         results: List[HarvestedCandidate] = []
 
         for item in pool_items:
+            # Descartar productos en portugués o de Brasil
+            if item.currency == "BRL" or any(pt in (item.title or "").lower() for pt in ("você", "voce", "não", "nao", "brasil", "r$", "reais", "aulas", "do zero ao")):
+                continue
+
             if await is_item_recently_published(
                 session=session,
                 clone_id=clone.id,
@@ -364,14 +450,10 @@ class HotmartHarvester(BaseMarketplaceHarvester):
                 break
 
         if not results:
-            # Si el clon aún no tiene productos pendientes en su pool, entra automáticamente al catálogo de Hotmart
+            # Si el clon aún no tiene productos pendientes en su pool, consulta el catálogo filtrando español y 1-clic
             from app.services.hotmart_sync import search_public_hotmart_marketplace
 
-            search_term = clone.niche_name.split()[0] if clone.niche_name else "curso"
-            if clone.search_keywords:
-                search_term = clone.search_keywords[0].split()[0]
-
-            discovered = await search_public_hotmart_marketplace(search_term, max_results=max_candidates)
+            discovered = await search_public_hotmart_marketplace(clone=clone, max_results=max_candidates)
             for prod in discovered:
                 prod_url = str(prod["url"]).strip()
                 url_hash = hashlib.sha1(prod_url.encode("utf-8")).hexdigest()[:10].upper()
@@ -384,10 +466,11 @@ class HotmartHarvester(BaseMarketplaceHarvester):
                 ):
                     continue
 
-                sale_p = Decimal(str(round(float(prod.get("sale_price") or 39.0), 2)))
+                sale_p = Decimal(str(round(float(prod.get("sale_price") or 49.0), 2)))
                 if sale_p <= Decimal("0.00"):
-                    sale_p = Decimal("39.00")
-                orig_p = (sale_p * Decimal("2.0")).quantize(Decimal("0.01"))
+                    sale_p = Decimal("49.00")
+                orig_p = sale_p
+                disc_p = Decimal("0.00")
 
                 existing_pool = (
                     await session.execute(
@@ -406,7 +489,7 @@ class HotmartHarvester(BaseMarketplaceHarvester):
                         image_url=str(prod["image_url"]),
                         original_price=orig_p,
                         sale_price=sale_p,
-                        discount_percent=Decimal("50.00"),
+                        discount_percent=disc_p,
                         currency="USD",
                         coupon_code="",
                         is_active=True,
@@ -421,7 +504,7 @@ class HotmartHarvester(BaseMarketplaceHarvester):
                         title=str(prod["title"])[:500],
                         original_price=orig_p,
                         sale_price=sale_p,
-                        discount_percent=Decimal("50.00"),
+                        discount_percent=disc_p,
                         currency="USD",
                         raw_product_url=prod_url,
                         image_url=str(prod["image_url"]),

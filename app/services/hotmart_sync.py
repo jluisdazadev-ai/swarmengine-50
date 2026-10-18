@@ -24,7 +24,13 @@ from tenacity import (
 )
 
 from app.config import get_settings
-from app.models import BotClone, HotmartProductPool, SystemSettings
+from app.models import (
+    BotClone,
+    HotmartProductPool,
+    MarketplaceEnum,
+    ProductOffer,
+    SystemSettings,
+)
 from app.services.harvester import extract_live_hotmart_metadata
 from app.services.seeder import ensure_system_settings
 
@@ -63,6 +69,93 @@ STOP_WORDS_NICHE = {
     "uno",
 }
 
+PORTUGUESE_INDICATORS = {
+    "voce",
+    "voces",
+    "nao",
+    "sao",
+    "tambem",
+    "comprar agora",
+    "aulas",
+    "do zero ao",
+    "treinamento",
+    "conheca",
+    "conhecer",
+    "inscricoes",
+    "inscricao",
+    "garanta sua vaga",
+    "metodo",
+    "conteudo",
+    "modulos",
+    "todo o brasil",
+    "em todo o brasil",
+    "brasileiro",
+    "brasileira",
+    "brasil",
+    "reais",
+    "portugues",
+    "portuguesa",
+    "pt-br",
+    "pt_br",
+    "seja bem vindo",
+    "seja bem-vindo",
+    "para iniciantes do zero",
+    "aprender do zero",
+    "apostila",
+    "planilha",
+    "obrigado",
+    "obrigada",
+    "ola a todos",
+    "reconhecido pelo mec",
+    "acesso vitalicio",
+    "garantia incondicional",
+    "comece agora",
+    "passo a passo para voce",
+    "r$",
+    "brl",
+}
+
+
+def _normalize_text(text: str) -> str:
+    """Convierte texto a minúsculas sin tildes para comparación temática exacta."""
+    decomposed = unicodedata.normalize("NFD", text.lower())
+    return "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
+
+
+def _is_portuguese_or_brazil_product(
+    title: str,
+    description: str = "",
+    url: str = "",
+    lang: str = "ES",
+    currency: str = "USD",
+) -> bool:
+    """
+    Detecta estrictamente si un producto proviene de Brasil o está en idioma Portugués.
+    Rechaza cualquier producto que no sea 100% en Español para cuentas de afiliados de habla hispana.
+    """
+    norm_lang = (lang or "").strip().upper()
+    if norm_lang and not norm_lang.startswith("ES"):
+        if any(pt in norm_lang for pt in ("PT", "BR", "EN", "POR")):
+            return True
+
+    norm_curr = (currency or "").strip().upper()
+    if norm_curr in ("BRL", "R$") or "R$" in (title or "") or "R$" in (description or ""):
+        return True
+
+    norm_url = (url or "").lower()
+    if any(ind in norm_url for ind in ("/pt-br/", ".com.br", "/br/")):
+        return True
+
+    combined = f"{title} {description}".lower()
+    normalized = _normalize_text(combined)
+
+    for indicator in PORTUGUESE_INDICATORS:
+        pattern = rf"(?:^|\b){re.escape(indicator)}(?:\b|$)"
+        if re.search(pattern, normalized):
+            return True
+
+    return False
+
 
 class SingleHotmartAssignment(BaseModel):
     """Asignación estructurada decidida por Gemini 2.5 Flash entre un producto de Hotmart y uno de los 50 Micro-Bots."""
@@ -78,12 +171,6 @@ class BatchHotmartAssignmentResponse(BaseModel):
     """Lista estructurada de asignaciones de productos de Hotmart a Micro-Bots."""
 
     assignments: List[SingleHotmartAssignment]
-
-
-def _normalize_text(text: str) -> str:
-    """Convierte texto a minúsculas sin tildes para comparación temática exacta."""
-    decomposed = unicodedata.normalize("NFD", text.lower())
-    return "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
 
 
 def extract_clean_niche_tokens(clone: BotClone) -> List[str]:
@@ -397,6 +484,14 @@ async def search_hotmart_affiliate_market_api(
         "name": "dearest",
         "userSessionId": session_uuid,
         "hasSendEvent": False,
+        "advancedFilters": {
+            "affiliation": {
+                "affiliationTypes": ["ONE_CLICK"],
+            },
+            "localization": {
+                "languages": ["ES"],
+            },
+        },
     }
 
     candidates: List[Dict[str, Any]] = []
@@ -426,6 +521,17 @@ async def search_hotmart_affiliate_market_api(
                         title = str(prod_obj.get("name") or "").strip()
                         if not title:
                             continue
+
+                        # 1. REGLA ESTRICTA: Sólo afiliación inmediata a 1 Clic (descartar solicitud / aprobación)
+                        aff_type = str(aff_obj.get("type") or "").strip().upper()
+                        if aff_type != "ONE_CLICK":
+                            continue
+
+                        # 2. REGLA ESTRICTA: Excluir cursos de Brasil, portugués o moneda BRL / R$
+                        currency = str(price_obj.get("currency") or "USD").upper()
+                        if _is_portuguese_or_brazil_product(title=title, lang="ES", currency=currency):
+                            continue
+
                         coherence = calculate_topic_coherence_score(title, clone)
                         if coherence <= 0:
                             continue
@@ -437,8 +543,9 @@ async def search_hotmart_affiliate_market_api(
                         temperature = float(prod_obj.get("temperature") or 50.0)
                         comm_pct = float(comm_obj.get("percentage") or 60.0)
                         comm_val = float(comm_obj.get("value") or 25.0)
-                        sale_price = float(price_obj.get("value") or 49.0)
-                        aff_type = str(aff_obj.get("type") or "ONE_CLICK")
+                        # Precio máximo real en Hotmart (sin inflar arbitrariamente)
+                        raw_max_price = float(price_obj.get("value") or 49.0)
+                        sale_price = round(max(5.0, raw_max_price), 2)
                         image_url = str(
                             prod_obj.get("image")
                             or "https://static-media.hotmart.com/img/hotmart-logo-share.png"
@@ -454,7 +561,6 @@ async def search_hotmart_affiliate_market_api(
                         else:
                             continue
 
-                        is_one_click = 1 if aff_type == "ONE_CLICK" else 0
                         candidates.append(
                             {
                                 "product_id": product_id,
@@ -462,15 +568,15 @@ async def search_hotmart_affiliate_market_api(
                                 "producer_ucode": producer_ucode,
                                 "title": (
                                     f"{title} (★ {rating:.1f} · {comm_pct:.0f}% Comisión "
-                                    f"[+${comm_val:.2f} USD] · Afiliación Inmediata)"
+                                    f"[+${comm_val:.2f} USD] · Afiliación Inmediata 1-Clic)"
                                 ),
                                 "url": direct_aff_url,
                                 "image_url": image_url,
-                                "sale_price": sale_price if sale_price > 0 else 49.0,
+                                "sale_price": sale_price,
                                 "rating": rating,
                                 "commission_pct": comm_pct,
                                 "temperature": temperature,
-                                "is_one_click": is_one_click,
+                                "is_one_click": 1,
                                 "coherence": coherence,
                             }
                         )
@@ -484,10 +590,9 @@ async def search_hotmart_affiliate_market_api(
     if not candidates:
         return []
 
-    # Ordenar por: 1) Afiliación inmediata 1-Clic, 2) Coherencia temática, 3) Mayor % comisión, 4) Mejor calificación ★
+    # Ordenar por: 1) Coherencia temática estricta, 2) Mayor % comisión, 3) Mejor calificación ★
     candidates.sort(
         key=lambda x: (
-            x.get("is_one_click", 1),
             x.get("coherence", 1),
             x.get("commission_pct", 50.0),
             x.get("rating", 4.8),
@@ -496,13 +601,22 @@ async def search_hotmart_affiliate_market_api(
         reverse=True,
     )
 
-    top_results = candidates[:max_results]
-    for item in top_results:
+    top_results: List[Dict[str, Any]] = []
+    for item in candidates:
         pid = int(item.get("product_id") or 0)
         if pid > 0:
             go_link = await auto_affiliate_and_extract_hotlink(bearer_token, pid)
             if go_link:
                 item["url"] = go_link
+                top_results.append(item)
+                if len(top_results) >= max_results:
+                    break
+            else:
+                logger.info(
+                    "Producto %s descartado: no devolvió HotLink go.hotmart.com inmediato (requiere aprobación)",
+                    pid,
+                )
+                continue
 
     return top_results
 
@@ -517,8 +631,8 @@ async def _extract_ucodes_from_product_detail_page(
     - `productId` (ID numérico exacto del producto en Hotmart)
     - `productUcode` (UUID del producto en el Mercado de Afiliación)
     - `producerUcode` (UUID del productor en el Mercado de Afiliación)
-    Con estos 2 UUIDs construye la URL exacta de afiliación a 1 clic del producto:
-    `https://app-vlc.hotmart.com/market/details?producerUcode={producerUcode}&productUcode={productUcode}`
+    - `real_price` y moneda oficial del producto
+    - Si la afiliación es de 1 Clic (`ONE_CLICK`) o por solicitud/moderación
     """
     result: Dict[str, Any] = {}
     try:
@@ -553,6 +667,22 @@ async def _extract_ucodes_from_product_detail_page(
                     f"https://app-vlc.hotmart.com/market/details"
                     f"?producerUcode={producer_ucode}&productUcode={product_ucode}"
                 )
+
+            # Extraer precio oficial máximo de la ficha
+            price_info = profile_prod.get("price") or {}
+            if isinstance(price_info, dict):
+                p_val = float(price_info.get("value") or 0.0)
+                if p_val > 0:
+                    result["real_price"] = p_val
+                    result["currency"] = str(price_info.get("currency") or "USD")
+            elif isinstance(price_info, (int, float)) and price_info > 0:
+                result["real_price"] = float(price_info)
+
+            # Verificar tipo de afiliación
+            aff_info = profile_prod.get("affiliation") or {}
+            aff_type = str(aff_info.get("type") or "").strip().upper()
+            if aff_type and aff_type != "ONE_CLICK":
+                result["is_approval_required"] = True
     except Exception as exc:
         logger.debug("No se pudieron extraer ucodes desde %s: %s", detail_url, exc)
     return result
@@ -571,12 +701,11 @@ async def search_public_hotmart_marketplace(
 ) -> List[Dict[str, Any]]:
     """
     1. Si hay `bearer_token` de Hotmart activo, busca directamente en el **Mercado de Afiliación interno**
-       (`api-affiliation-market.hotmart.com/v2/market/search`), se auto-afilia en 1 clic y extrae el `go.hotmart.com`.
-    2. Si aún no hay `bearer_token` (o como respaldo), extrae los cursos reales del nicho desde el estado SSR
-       `__NEXT_DATA__ -> props.pageProps.resultsData.requestData.results`, obtiene su `productId`,
+       (`api-affiliation-market.hotmart.com/v2/market/search`), asegurando afiliación 1-clic y extrayendo `go.hotmart.com`.
+    2. Si aún no hay `bearer_token` (o como respaldo), extrae los cursos reales del nicho desde el catálogo
+       filtrando estrictamente productos en español (ES) y no brasileños, obtiene su `productId`,
        `producerUcode` y `productUcode` reales, y genera el enlace directo a la ficha de afiliación
-       de ese producto exacto en Hotmart (`https://app-vlc.hotmart.com/market/details?producerUcode=...&productUcode=...`),
-       ¡nunca al marketplace de compra ni a una pantalla de búsqueda genérica!
+       exacta del producto (`https://app-vlc.hotmart.com/market/details?producerUcode=...&productUcode=...`).
     """
     if bearer_token:
         api_results = await search_hotmart_affiliate_market_api(
@@ -638,6 +767,16 @@ async def search_public_hotmart_marketplace(
                         if not title:
                             continue
 
+                        # 1. REGLA ESTRICTA: Sólo productos en Español (ES)
+                        lang = str(prod.get("language") or prod.get("locale") or "ES").upper()
+                        if "ES" not in lang:
+                            continue
+
+                        # 2. REGLA ESTRICTA: Excluir productos de Brasil o en Portugués
+                        slug = str(prod.get("slug") or "").strip()
+                        if _is_portuguese_or_brazil_product(title=title, description=description, url=slug, lang=lang):
+                            continue
+
                         coherence = calculate_topic_coherence_score(f"{title} {tags_str}", clone)
                         if coherence <= 0 and calculate_topic_coherence_score(description[:250], clone) <= 0:
                             continue
@@ -645,12 +784,9 @@ async def search_public_hotmart_marketplace(
                             coherence = 1
 
                         product_id = int(prod.get("productId") or prod.get("id") or 0)
-                        slug = str(prod.get("slug") or "").strip()
                         ref_code = str(prod.get("producerReferenceCode") or "").strip()
                         rating = float(prod.get("rating") or prod.get("reviewRating") or 4.8)
                         total_reviews = int(prod.get("totalReviews") or 10)
-                        lang = str(prod.get("language") or prod.get("locale") or "ES").upper()
-                        is_spanish = 1 if "ES" in lang else 0
 
                         image_url = str(
                             prod.get("finalAvatar")
@@ -667,6 +803,9 @@ async def search_public_hotmart_marketplace(
                         if not detail_page_url:
                             continue
 
+                        price_data = prod.get("price") or {}
+                        raw_p = float(price_data.get("value") or 0.0) if isinstance(price_data, dict) else 0.0
+
                         raw_candidates.append(
                             {
                                 "product_id": product_id,
@@ -675,7 +814,7 @@ async def search_public_hotmart_marketplace(
                                 "image_url": image_url,
                                 "rating": round(max(4.5, min(rating, 5.0)), 1),
                                 "total_reviews": total_reviews,
-                                "is_spanish": is_spanish,
+                                "price": raw_p,
                                 "coherence": coherence,
                             }
                         )
@@ -685,10 +824,9 @@ async def search_public_hotmart_marketplace(
                 if raw_candidates:
                     break
 
-            # Ordenar por: 1) Español, 2) Coherencia temática con el nicho, 3) Mejor calificación y reseñas
+            # Ordenar por: 1) Coherencia temática con el nicho, 2) Mejor calificación y reseñas
             raw_candidates.sort(
                 key=lambda x: (
-                    x.get("is_spanish", 0),
                     x.get("coherence", 1),
                     x.get("rating", 4.8),
                     x.get("total_reviews", 1),
@@ -697,16 +835,23 @@ async def search_public_hotmart_marketplace(
             )
 
             discovered: List[Dict[str, Any]] = []
-            for cand in raw_candidates[: max_results * 2]:
+            for cand in raw_candidates[: max_results * 3]:
                 ucode_info = await _extract_ucodes_from_product_detail_page(client, cand["detail_page_url"])
+                if ucode_info.get("is_approval_required"):
+                    logger.info("Descartando producto %s por requerir solicitud manual de afiliación", cand.get("product_id"))
+                    continue
+
                 product_id = int(ucode_info.get("product_id") or cand.get("product_id") or 0)
                 direct_aff_url = str(ucode_info.get("direct_affiliate_url") or "").strip()
 
-                # Si tenemos bearer_token, intentamos auto-afiliación inmediata y extracción de go.hotmart.com
+                # Si tenemos bearer_token, auto-afiliarse y extraer go.hotmart.com
                 if bearer_token and product_id > 0:
                     go_link = await auto_affiliate_and_extract_hotlink(bearer_token, product_id)
                     if go_link:
                         direct_aff_url = go_link
+                    else:
+                        logger.info("Descartando producto %s por no permitir auto-afiliación inmediata 1-clic", product_id)
+                        continue
 
                 if not direct_aff_url:
                     if product_id > 0:
@@ -714,10 +859,8 @@ async def search_public_hotmart_marketplace(
                     else:
                         continue
 
-                target_price = float(
-                    ((clone.min_price or Decimal("29.00")) + (clone.max_price or Decimal("99.00"))) / Decimal("2.5")
-                )
-                sale_price_clean = round(max(29.00, min(target_price, 89.00)), 2)
+                real_price = float(ucode_info.get("real_price") or cand.get("price") or 49.0)
+                sale_price_clean = round(max(10.0, real_price), 2)
 
                 discovered.append(
                     {
@@ -725,7 +868,7 @@ async def search_public_hotmart_marketplace(
                         "product_ucode": ucode_info.get("product_ucode", ""),
                         "producer_ucode": ucode_info.get("producer_ucode", ""),
                         "title": (
-                            f"{cand['title']} (★ {cand['rating']:.1f} · Afiliación 1-Clic · "
+                            f"{cand['title']} (★ {cand['rating']:.1f} · Afiliación Inmediata 1-Clic · "
                             f"Comisión hasta 80% USD)"
                         ),
                         "url": direct_aff_url,
@@ -1027,14 +1170,19 @@ async def bulk_auto_assign_hotlinks_with_ai(
         else:
             target_clone = find_best_matching_clone_for_title(raw_title, all_clones)
             final_title = raw_title[:450]
-            sale_p = Decimal(str(round(float(item["detected_price"]), 2)))
-            orig_p = (sale_p * Decimal("2.0")).quantize(Decimal("0.01"))
+            real_price_dec = Decimal(str(round(float(item["detected_price"]), 2)))
+            if default_coupon.strip():
+                orig_p = real_price_dec
+                sale_p = (real_price_dec * Decimal("0.50")).quantize(Decimal("0.01"))
+                disc_dec = Decimal("50.00")
+            else:
+                orig_p = real_price_dec
+                sale_p = real_price_dec
+                disc_dec = Decimal("0.00")
 
-        if orig_p <= sale_p:
-            orig_p = (sale_p * Decimal("2.0")).quantize(Decimal("0.01"))
+        if orig_p < sale_p:
+            orig_p = sale_p
 
-        disc_float = round(float(((orig_p - sale_p) / orig_p) * Decimal("100")), 1)
-        disc_dec = Decimal(str(disc_float))
         url_hash = hashlib.sha1(url.encode("utf-8")).hexdigest()[:10].upper()
         external_id = f"HOT_{url_hash}"
 
@@ -1082,15 +1230,12 @@ async def auto_discover_hotmart_catalog_for_clones(
 ) -> int:
     """
     Recorre los 50 Micro-Bots:
-    1. Elimina cualquier enlace antiguo que apunte al marketplace de compra (`hotmart.com/es/marketplace`)
-       o a pantallas de búsqueda genéricas (`?q=`), o que no coincida con el nicho del bot.
+    1. Elimina cualquier enlace antiguo de compra (`hotmart.com/es/marketplace`), búsqueda genérica (`?q=`),
+       o cursos en portugués / Brasil, o que requieran aprobación manual.
     2. Si el usuario conectó su cuenta/token de Hotmart, sincroniza primero sus afiliaciones activas
-       (`GET /v2/affiliations/products`) y busca en el **Mercado de Afiliación interno**
-       (`POST api-affiliation-market.hotmart.com/v2/market/search`), auto-afiliándose en 1 clic
-       (`POST /v1/market/affiliation-request`) y tomando el link `https://go.hotmart.com/XXXX`.
-    3. Incluso sin token activo, extrae el `productId`, `producerUcode` y `productUcode` reales de cada curso
-       y asigna la URL directa a la ficha exacta del producto en el Mercado de Afiliación:
-       `https://app-vlc.hotmart.com/market/details?producerUcode={producerUcode}&productUcode={productUcode}`.
+       y busca en el **Mercado de Afiliación interno**, auto-afiliándose en 1 clic y tomando el `go.hotmart.com`.
+    3. Garantiza que el precio guardado (`original_price` / `sale_price`) sea el precio máximo REAL del producto,
+       sin sobreprecios arbitrarios.
     """
     sys_settings = await ensure_system_settings(session)
     bearer_token = await resolve_hotmart_bearer_token(sys_settings)
@@ -1099,7 +1244,7 @@ async def auto_discover_hotmart_catalog_for_clones(
     clones = list((await session.execute(stmt)).scalars().all())
     clone_by_id = {c.id: c for c in clones}
 
-    # 1. Limpiar enlaces antiguos de compra/búsqueda (`hotmart.com/es/marketplace` o `?q=`) o incoherentes
+    # 1. Limpiar enlaces antiguos de compra/búsqueda, brasileños o incoherentes
     if reset_incoherent:
         all_pool = list((await session.execute(select(HotmartProductPool))).scalars().all())
         for p_item in all_pool:
@@ -1112,7 +1257,12 @@ async def auto_discover_hotmart_catalog_for_clones(
                 or "?q=" in url_str
                 or "/market/search" in url_str
             )
-            if is_buyer_or_search_url:
+            is_brazil = _is_portuguese_or_brazil_product(
+                title=p_item.title,
+                url=url_str,
+                currency=p_item.currency or "USD",
+            )
+            if is_buyer_or_search_url or is_brazil:
                 await session.delete(p_item)
                 continue
             if owner_clone is not None and not is_manual_go_link:
@@ -1126,6 +1276,9 @@ async def auto_discover_hotmart_catalog_for_clones(
                         go_link = await auto_affiliate_and_extract_hotlink(bearer_token, int(raw_pid))
                         if go_link:
                             p_item.hotlink_url = go_link
+                        else:
+                            # Requiere moderación manual o fue rechazado: eliminar de la cola
+                            await session.delete(p_item)
         await session.flush()
 
     total_assigned = 0
@@ -1173,10 +1326,12 @@ async def auto_discover_hotmart_catalog_for_clones(
                 )
             ).scalar_one_or_none()
 
-            sale_p = Decimal(str(round(float(prod.get("sale_price") or 49.0), 2)))
-            if sale_p <= Decimal("0.00"):
-                sale_p = Decimal("49.00")
-            orig_p = (sale_p * Decimal("2.0")).quantize(Decimal("0.01"))
+            # Precio real máximo oficial de Hotmart (sin inflar * 2)
+            real_price = Decimal(str(round(float(prod.get("sale_price") or 49.0), 2)))
+            if real_price <= Decimal("0.00"):
+                real_price = Decimal("49.00")
+            orig_p = real_price
+            sale_p = real_price
 
             if exists is None:
                 entry = HotmartProductPool(
@@ -1187,9 +1342,9 @@ async def auto_discover_hotmart_catalog_for_clones(
                     image_url=str(prod["image_url"]),
                     original_price=orig_p,
                     sale_price=sale_p,
-                    discount_percent=Decimal("50.00"),
+                    discount_percent=Decimal("0.00"),
                     currency="USD",
-                    coupon_code="50OFF",
+                    coupon_code="",
                     is_active=True,
                 )
                 session.add(entry)
@@ -1197,6 +1352,8 @@ async def auto_discover_hotmart_catalog_for_clones(
             else:
                 exists.hotlink_url = prod_url
                 exists.title = str(prod["title"])[:500]
+                exists.original_price = orig_p
+                exists.sale_price = sale_p
                 exists.is_active = True
 
     await session.commit()
@@ -1206,3 +1363,117 @@ async def auto_discover_hotmart_catalog_for_clones(
         scanned_clones,
     )
     return total_assigned
+
+
+async def purge_unaffiliated_or_unpublished_pool_items(
+    session: AsyncSession,
+) -> int:
+    """
+    Elimina del catálogo en cola (`HotmartProductPool`) todos los productos que:
+    1. No tengan un enlace directo de afiliado `https://go.hotmart.com/...`.
+    2. Sean de Brasil o estén en portugués (PT_BR / BRL / portugués).
+    3. Hayan requerido aprobación/solicitud manual o no estén listos para venta inmediata.
+    Deja la cola 100% limpia para recibir únicamente productos con afiliación inmediata 1-clic y en español.
+    """
+    stmt = select(HotmartProductPool)
+    all_items = list((await session.execute(stmt)).scalars().all())
+
+    deleted_count = 0
+    for item in all_items:
+        url = (item.hotlink_url or "").strip()
+        title = (item.title or "").strip()
+        has_go_hotmart = "go.hotmart.com" in url
+        is_brazil = _is_portuguese_or_brazil_product(title=title, url=url, currency=item.currency or "USD")
+
+        # Borrar si es brasileño, O no tiene go.hotmart.com
+        if is_brazil or not has_go_hotmart:
+            await session.delete(item)
+            deleted_count += 1
+
+    if deleted_count > 0:
+        await session.commit()
+    logger.info("Purga de asignaciones Hotmart eliminó %d productos no válidos de la cola.", deleted_count)
+    return deleted_count
+
+
+async def audit_and_fix_published_and_pool_prices(
+    session: AsyncSession,
+) -> Dict[str, int]:
+    """
+    Audita y corrige en vivo los precios de:
+    1. Todas las ofertas ya publicadas en el portal y pSEO (`ProductOffer`).
+    2. Todos los productos en cola (`HotmartProductPool`).
+    Ajusta el precio para que coincida exactamente con el precio real máximo del producto en Hotmart,
+    eliminando sobreprecios artificiales (* 2), y regenera las tarjetas visuales de las ofertas ya publicadas.
+    """
+    stats = {"offers_fixed": 0, "pool_fixed": 0, "cards_regenerated": 0, "brazil_deleted": 0}
+
+    # 1. Auditar y corregir HotmartProductPool
+    pool_stmt = select(HotmartProductPool)
+    pool_items = list((await session.execute(pool_stmt)).scalars().all())
+
+    for item in pool_items:
+        url = (item.hotlink_url or "").strip()
+        title = (item.title or "").strip()
+
+        # Si es brasileño, eliminarlo
+        if _is_portuguese_or_brazil_product(title=title, url=url, currency=item.currency or "USD"):
+            await session.delete(item)
+            stats["brazil_deleted"] += 1
+            continue
+
+        # Si el precio original está duplicado artificialmente (* 2.0 de sale_price)
+        if item.original_price > item.sale_price and item.original_price == (item.sale_price * Decimal("2.0")).quantize(Decimal("0.01")):
+            real_max = item.sale_price
+            if item.coupon_code:
+                item.original_price = real_max
+                item.sale_price = (real_max * Decimal("0.50")).quantize(Decimal("0.01"))
+                item.discount_percent = Decimal("50.00")
+            else:
+                item.original_price = real_max
+                item.sale_price = real_max
+                item.discount_percent = Decimal("0.00")
+            stats["pool_fixed"] += 1
+
+    # 2. Auditar y corregir ProductOffer (ofertas ya publicadas)
+    from app.services.image_card import generate_offer_card
+
+    offers_stmt = select(ProductOffer)
+    offers = list((await session.execute(offers_stmt)).scalars().all())
+
+    for off in offers:
+        if off.source_marketplace != MarketplaceEnum.HOTMART:
+            continue
+
+        # Si el precio original está inflado al doble
+        is_doubled = (off.original_price > off.sale_price) and (
+            off.original_price == (off.sale_price * Decimal("2.0")).quantize(Decimal("0.01"))
+        )
+
+        if is_doubled:
+            real_max = off.sale_price
+            off.original_price = real_max
+            off.sale_price = real_max
+            off.discount_percent = Decimal("0.00")
+            stats["offers_fixed"] += 1
+
+            try:
+                clone = off.clone
+                niche_name = clone.niche_name if clone else "Cursos Online"
+                await generate_offer_card(
+                    image_url=off.image_url,
+                    hook_headline=off.title[:60],
+                    original_price=off.original_price,
+                    sale_price=off.sale_price,
+                    discount_percent=off.discount_percent,
+                    currency=off.currency or "USD",
+                    niche_name=niche_name,
+                    short_code=off.short_code,
+                )
+                stats["cards_regenerated"] += 1
+            except Exception as exc:
+                logger.debug("No se pudo regenerar tarjeta para offer=%s: %s", off.id, exc)
+
+    await session.commit()
+    logger.info("Auditoría de precios completada: %s", stats)
+    return stats

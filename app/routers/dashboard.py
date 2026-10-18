@@ -280,10 +280,14 @@ async def add_hotmart_product_to_pool(
 
     orig_dec = Decimal(str(max(1.0, round(original_price, 2))))
     sale_dec = Decimal(str(max(0.5, round(sale_price, 2))))
-    if orig_dec <= sale_dec:
-        orig_dec = (sale_dec * Decimal("2.0")).quantize(Decimal("0.01"))
+    if orig_dec < sale_dec:
+        orig_dec = sale_dec
 
-    disc_float = round(float(((orig_dec - sale_dec) / orig_dec) * Decimal("100")), 1)
+    disc_float = (
+        round(float(((orig_dec - sale_dec) / orig_dec) * Decimal("100")), 1)
+        if orig_dec > sale_dec
+        else 0.0
+    )
     disc_dec = Decimal(str(disc_float))
 
     url_hash = hashlib.sha1(clean_hotlink.encode("utf-8")).hexdigest()[:10].upper()
@@ -505,6 +509,55 @@ async def update_hotmart_pool_link(
 
     return RedirectResponse(
         url="/admin?msg=Tu+HotLink+personal+de+afiliado+fue+guardado+en+el+Bot",
+        status_code=302,
+    )
+
+
+@router.post("/hotmart/purge-unaffiliated")
+async def admin_purge_unaffiliated_hotmart(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """
+    Elimina del catálogo en cola todas las asignaciones que no tengan un enlace go.hotmart.com válido,
+    que sean de Brasil / en portugués, o que requieran aprobación manual.
+    """
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    from app.services.hotmart_sync import purge_unaffiliated_or_unpublished_pool_items
+
+    count = await purge_unaffiliated_or_unpublished_pool_items(session=session)
+    return RedirectResponse(
+        url=f"/admin?msg=Cola+limpiada:+Se+eliminaron+{count}+asignaciones+no+validas,+brasilenas+o+sin+afiliacion+inmediata",
+        status_code=302,
+    )
+
+
+@router.post("/hotmart/fix-prices")
+async def admin_fix_hotmart_prices(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """
+    Revisa y corrige en 1 clic los precios de todas las ofertas publicadas y productos en cola,
+    asegurando que coincidan con el precio real máximo oficial de Hotmart (sin sobreprecios duplicados * 2)
+    y regenerando las tarjetas visuales de las ofertas publicadas.
+    """
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    from app.services.hotmart_sync import audit_and_fix_published_and_pool_prices
+
+    stats = await audit_and_fix_published_and_pool_prices(session=session)
+    msg = (
+        f"Precios+corregidos:+{stats.get('offers_fixed', 0)}+ofertas+publicadas+y+"
+        f"{stats.get('pool_fixed', 0)}+productos+en+cola+actualizados+al+precio+real+maximo"
+    )
+    if stats.get("brazil_deleted", 0) > 0:
+        msg += f"+({stats['brazil_deleted']}+productos+de+Brasil+eliminados)"
+    return RedirectResponse(
+        url=f"/admin?msg={msg}",
         status_code=302,
     )
 

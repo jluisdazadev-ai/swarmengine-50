@@ -229,10 +229,13 @@ def _render_card_sync(
     )
     draw.text((pill_x1 + 18, pill_y1 + 8), niche_label, font=font_niche, fill=(148, 163, 184, 255))
 
-    # Insignia roja brillante en la esquina superior derecha con `-{discount_percent}% OFF`
+    # Insignia en la esquina superior derecha
     disc_int = int(round(float(discount_percent)))
-    badge_text = f"-{disc_int}% OFF"
-    font_badge = _load_font(size=44, bold=True)
+    if disc_int > 0:
+        badge_text = f"-{disc_int}% OFF"
+    else:
+        badge_text = "ACCESO INMEDIATO"
+    font_badge = _load_font(size=36 if disc_int <= 0 else 44, bold=True)
     bw, bh = _measure_text(draw, badge_text, font_badge)
 
     badge_pad_x = 34
@@ -244,17 +247,18 @@ def _render_card_sync(
     badge_y1 = 38
     badge_y2 = badge_y1 + badge_h
 
-    # Sombra de la insignia roja
+    # Sombra de la insignia
     draw.rounded_rectangle(
         (badge_x1 - 3, badge_y1 + 6, badge_x2 + 3, badge_y2 + 6),
         radius=28,
         fill=(0, 0, 0, 150),
     )
-    # Fondo rojo brillante (#EF4444 / RGB 239, 35, 60) con borde blanco
+    # Fondo rojo (#EF4444) si hay descuento o verde esmeralda (#059669) si es precio regular oficial
+    badge_fill = (239, 35, 60, 255) if disc_int > 0 else (5, 150, 105, 255)
     draw.rounded_rectangle(
         (badge_x1, badge_y1, badge_x2, badge_y2),
         radius=28,
-        fill=(239, 35, 60, 255),
+        fill=badge_fill,
         outline=(255, 255, 255, 245),
         width=4,
     )
@@ -277,7 +281,7 @@ def _render_card_sync(
 
     # 1. Hook Headline en blanco/amarillo en la parte superior de la franja inferior
     font_hook = _load_font(size=40, bold=True)
-    hook_clean = hook_headline.strip().upper() or "OFERTA VERIFICADA HOY"
+    hook_clean = hook_headline.strip().upper() or "PROGRAMA CERTIFICADO HOTMART"
     hook_lines = _wrap_text_to_width(draw, hook_clean, font_hook, max_width=920, max_lines=1)
     hook_line = hook_lines[0] if hook_lines else hook_clean
     hw, hh = _measure_text(draw, hook_line, font_hook)
@@ -285,22 +289,32 @@ def _render_card_sync(
     hook_y = footer_top + 26
     draw.text((hook_x, hook_y), hook_line, font=font_hook, fill=(250, 204, 21, 255))
 
-    # 2. Precio anterior tachado en gris
-    orig_str = f"Antes: {format_currency_amount(original_price, currency)}"
-    font_orig = _load_font(size=32, bold=False)
-    ow, oh = _measure_text(draw, orig_str, font_orig)
-    orig_x = (CANVAS_WIDTH - ow) // 2
-    orig_y = hook_y + hh + 24
-    gray_color = (156, 163, 175, 255)
-    draw.text((orig_x, orig_y), orig_str, font=font_orig, fill=gray_color)
+    # 2. Precio anterior tachado si hay descuento, o etiqueta de precio oficial
+    if original_price > sale_price and disc_int > 0:
+        orig_str = f"Antes: {format_currency_amount(original_price, currency)}"
+        font_orig = _load_font(size=32, bold=False)
+        ow, oh = _measure_text(draw, orig_str, font_orig)
+        orig_x = (CANVAS_WIDTH - ow) // 2
+        orig_y = hook_y + hh + 22
+        gray_color = (156, 163, 175, 255)
+        draw.text((orig_x, orig_y), orig_str, font=font_orig, fill=gray_color)
 
-    # Línea de tachado roja/gris sobre el precio anterior
-    strike_y = orig_y + (oh // 2) + 4
-    draw.line(
-        [(orig_x - 6, strike_y), (orig_x + ow + 6, strike_y)],
-        fill=(239, 68, 68, 230),
-        width=4,
-    )
+        # Línea de tachado roja sobre el precio anterior
+        strike_y = orig_y + (oh // 2) + 4
+        draw.line(
+            [(orig_x - 6, strike_y), (orig_x + ow + 6, strike_y)],
+            fill=(239, 68, 68, 230),
+            width=4,
+        )
+        sale_y = orig_y + oh + 16
+    else:
+        orig_str = "PRECIO OFICIAL EN HOTMART"
+        font_orig = _load_font(size=26, bold=False)
+        ow, oh = _measure_text(draw, orig_str, font_orig)
+        orig_x = (CANVAS_WIDTH - ow) // 2
+        orig_y = hook_y + hh + 20
+        draw.text((orig_x, orig_y), orig_str, font=font_orig, fill=(148, 163, 184, 255))
+        sale_y = orig_y + oh + 12
 
     # 3. Precio de oferta actual en verde neón brillante de gran tamaño
     sale_str = format_currency_amount(sale_price, currency)
