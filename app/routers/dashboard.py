@@ -539,14 +539,22 @@ async def update_system_settings(
         sys_settings.gemini_api_key = gemini_api_key.strip()
     if telegram_bot_token.strip():
         sys_settings.telegram_bot_token = telegram_bot_token.strip()
-    sys_settings.admin_telegram_chat_id = admin_telegram_chat_id.strip()
+    clean_tg_channel = admin_telegram_chat_id.strip()
+    if clean_tg_channel and not clean_tg_channel.startswith("@") and not clean_tg_channel.startswith("-") and not clean_tg_channel.isdigit():
+        clean_tg_channel = f"@{clean_tg_channel}"
+    sys_settings.admin_telegram_chat_id = clean_tg_channel
+    if clean_tg_channel:
+        all_clones = list((await session.execute(select(BotClone))).scalars().all())
+        for clone in all_clones:
+            clone.telegram_channel_id = clean_tg_channel
+
     if evolution_api_url.strip():
         sys_settings.evolution_api_url = evolution_api_url.strip()
     if evolution_api_key.strip():
         sys_settings.evolution_api_key = evolution_api_key.strip()
     if base_shortlink_domain.strip():
         sys_settings.base_shortlink_domain = base_shortlink_domain.strip()
-    sys_settings.preferred_marketplace_mode = preferred_marketplace_mode.strip().upper() or "HYBRID"
+    sys_settings.preferred_marketplace_mode = preferred_marketplace_mode.strip().upper() or "HOTMART"
     if hotmart_hottok.strip():
         sys_settings.hotmart_hottok = hotmart_hottok.strip()
     sys_settings.mercadolibre_country_site = mercadolibre_country_site.strip().upper() or "MCO"
@@ -556,7 +564,7 @@ async def update_system_settings(
     sys_settings.daily_global_budget_usd = Decimal(str(round(daily_global_budget_usd, 2)))
 
     await session.commit()
-    return RedirectResponse(url="/admin?msg=Configuracion+global+guardada", status_code=302)
+    return RedirectResponse(url="/admin?msg=Configuracion+global+y+Canal+de+Telegram+actualizados", status_code=302)
 
 
 @router.post("/clones/generate-batch")
