@@ -758,6 +758,39 @@ async def set_master_telegram_channel(
     )
 
 
+@router.post("/seo/ping-all")
+async def ping_all_search_engines(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """Fuerza en 1 clic el envío masivo de todas las ofertas y categorías a IndexNow (Bing/Yahoo/Yandex) y Google WebSub."""
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    from app.services.indexer import submit_to_google_websub_hub, submit_urls_to_indexnow
+    from app.services.publisher import build_category_pseo_url, build_offer_pseo_url
+
+    sys_settings = await ensure_system_settings(session)
+    offers = list((await session.execute(select(ProductOffer).order_by(desc(ProductOffer.detected_at)).limit(200))).scalars().all())
+    clones = list((await session.execute(select(BotClone).where(BotClone.is_active.is_(True)))).scalars().all())
+
+    urls: List[str] = [f"{sys_settings.base_shortlink_domain.rstrip('/')}/"]
+    for off in offers:
+        urls.append(build_offer_pseo_url(off.short_code, off.title, sys_settings=sys_settings))
+        off.indexed_google = True
+    for clone in clones:
+        urls.append(build_category_pseo_url(clone.pseo_category_slug, sys_settings=sys_settings))
+
+    await submit_urls_to_indexnow(urls[:500], sys_settings=sys_settings)
+    await submit_to_google_websub_hub(sys_settings=sys_settings)
+    await session.commit()
+
+    return RedirectResponse(
+        url=f"/admin?msg=Se+notificaron+{len(urls)}+URLs+a+Google+WebSub+e+IndexNow+(Bing/Yahoo/DuckDuckGo)",
+        status_code=302,
+    )
+
+
 @router.post("/darwin/run")
 async def admin_trigger_darwin_cycle(
     request: Request,

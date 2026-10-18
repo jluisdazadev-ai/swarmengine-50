@@ -135,14 +135,51 @@ async def submit_url_to_google_indexing(
         return False
 
 
+async def submit_to_google_websub_hub(
+    sys_settings: Optional[SystemSettings] = None,
+) -> bool:
+    """
+    Notifica en tiempo real al Hub oficial de Google WebSub / PubSubHubbub
+    (`https://pubsubhubbub.appspot.com/`) que el feed `/rss.xml` y `/sitemap.xml` tienen nuevas ofertas.
+    No requiere API Key ni Service Account y fuerza el rastreo de Google FeedFetcher en segundos.
+    """
+    base_domain_url = (
+        sys_settings.base_shortlink_domain
+        if sys_settings and sys_settings.base_shortlink_domain
+        else settings.base_shortlink_domain
+    ).rstrip("/")
+    rss_url = f"{base_domain_url}/rss.xml"
+    sitemap_url = f"{base_domain_url}/sitemap.xml"
+
+    timeout = httpx.Timeout(connect=8.0, read=12.0, write=8.0, pool=8.0)
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(
+                "https://pubsubhubbub.appspot.com/",
+                data={
+                    "hub.mode": "publish",
+                    "hub.url": [rss_url, sitemap_url],
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            if resp.status_code in (200, 202, 204):
+                logger.info("Google WebSub Hub notificado exitosamente para %s", rss_url)
+                return True
+    except Exception as exc:
+        logger.debug("Aviso al notificar Google WebSub Hub: %s", exc)
+    return False
+
+
 async def notify_search_engines_for_offer(
     offer_url: str,
     category_url: str,
     sys_settings: Optional[SystemSettings] = None,
 ) -> bool:
     """
-    Dispara en paralelo la notificación a IndexNow API y Google Indexing API
-    para la URL individual de la oferta y la página del micro-nicho.
+    Dispara en paralelo la notificación a:
+    1. IndexNow API (Bing, Yahoo, DuckDuckGo, Yandex)
+    2. Google WebSub / PubSubHubbub (Rastreo inmediato sin API Key)
+    3. Google Indexing API (si existe Service Account JSON)
     Devuelve True si al menos uno de los motores confirmó recepción.
     """
     urls_to_index = [offer_url, category_url]
@@ -150,10 +187,13 @@ async def notify_search_engines_for_offer(
     indexnow_task = asyncio.create_task(
         submit_urls_to_indexnow(urls_to_index, sys_settings=sys_settings)
     )
+    websub_task = asyncio.create_task(
+        submit_to_google_websub_hub(sys_settings=sys_settings)
+    )
     google_offer_task = asyncio.create_task(
         submit_url_to_google_indexing(offer_url, notification_type="URL_UPDATED")
     )
 
-    results = await asyncio.gather(indexnow_task, google_offer_task, return_exceptions=True)
+    results = await asyncio.gather(indexnow_task, websub_task, google_offer_task, return_exceptions=True)
     success = any(r is True for r in results)
     return success
