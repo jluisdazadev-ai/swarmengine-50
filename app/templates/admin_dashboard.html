@@ -336,6 +336,11 @@
                     <p class="text-xs text-slate-400">Puedes pausar toda la flota mientras cargas enlaces y activarla cuando estés listo.</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
+                    <form action="/admin/clones/auto-detect-telegram" method="post">
+                        <button type="submit" class="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold transition" title="Escribe 'hola' en tu canal con el Bot como Admin y presiona aquí">
+                            🔍 Auto-Detectar ID de mi Canal
+                        </button>
+                    </form>
                     <form action="/admin/clones/set-master-telegram" method="post" class="flex items-center gap-1.5">
                         <input
                             type="text"

@@ -758,6 +758,51 @@ async def set_master_telegram_channel(
     )
 
 
+@router.post("/clones/auto-detect-telegram")
+async def auto_detect_and_assign_telegram_channel(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """
+    Pregunta directamente a la API de Telegram (`getUpdates`) en qué Canal o Grupo fue agregado el Bot,
+    extrae el ID real verificado y lo asigna automáticamente a los 50 Micro-Bots.
+    """
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    from app.services.publisher import auto_detect_telegram_channels
+
+    sys_settings = await ensure_system_settings(session)
+    bot_token = (sys_settings.telegram_bot_token or settings.telegram_bot_token).strip()
+    if not bot_token:
+        return RedirectResponse(
+            url="/admin?msg=Primero+guarda+tu+Telegram+Bot+Token+abajo+en+Configuracion+Global",
+            status_code=302,
+        )
+
+    detected = await auto_detect_telegram_channels(bot_token)
+    if not detected:
+        return RedirectResponse(
+            url="/admin?msg=Telegram+aun+no+reporta+canales.+1)+Mete+tu+Bot+como+Administrador+del+canal+y+2)+Escribe+HOLA+en+el+canal+y+vuelve+a+dar+clic+aqui",
+            status_code=302,
+        )
+
+    best_chat = detected[0]
+    real_id = best_chat["numeric_id"]
+    title = best_chat["title"].replace(" ", "+")[:40]
+
+    sys_settings.admin_telegram_chat_id = real_id
+    clones = list((await session.execute(select(BotClone))).scalars().all())
+    for clone in clones:
+        clone.telegram_channel_id = real_id
+    await session.commit()
+
+    return RedirectResponse(
+        url=f"/admin?msg=Canal+detectado+automaticamente:+{title}+(ID+{real_id})+y+asignado+a+los+50+Bots",
+        status_code=302,
+    )
+
+
 @router.post("/seo/ping-all")
 async def ping_all_search_engines(
     request: Request,

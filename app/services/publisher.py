@@ -73,6 +73,53 @@ def html_to_whatsapp_markdown(telegram_html: str, short_link: str) -> str:
     return f"{text}\n\n🔥 *Ver Oferta Real Aquí:* {short_link}"
 
 
+async def auto_detect_telegram_channels(bot_token: str) -> list[Dict[str, str]]:
+    """
+    Consulta `https://api.telegram.org/bot{token}/getUpdates` para descubrir automáticamente
+    los canales, supergrupos o chats donde el usuario haya agregado al Bot como Administrador
+    o donde haya escrito un mensaje.
+    """
+    clean_token = bot_token.strip()
+    if not clean_token:
+        return []
+
+    url = f"https://api.telegram.org/bot{clean_token}/getUpdates?limit=100"
+    discovered: Dict[str, Dict[str, str]] = {}
+    timeout = httpx.Timeout(connect=8.0, read=12.0, write=8.0, pool=8.0)
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.get(url)
+            if resp.status_code != 200:
+                return []
+            payload = resp.json()
+            updates = payload.get("result") or []
+            for upd in reversed(updates):
+                for key in ("channel_post", "edited_channel_post", "my_chat_member", "chat_member", "message"):
+                    node = upd.get(key)
+                    if isinstance(node, dict) and isinstance(node.get("chat"), dict):
+                        chat = node["chat"]
+                        cid = str(chat.get("id", "")).strip()
+                        if not cid:
+                            continue
+                        ctype = str(chat.get("type", ""))
+                        title = str(chat.get("title") or chat.get("username") or chat.get("first_name") or cid)
+                        username = str(chat.get("username") or "")
+                        if cid not in discovered:
+                            discovered[cid] = {
+                                "id": f"@{username}" if username and ctype == "channel" else cid,
+                                "numeric_id": cid,
+                                "title": title,
+                                "type": ctype,
+                            }
+    except Exception as exc:
+        logger.warning("Error consultando getUpdates de Telegram: %s", exc)
+
+    # Priorizar canales y supergrupos primero
+    priority = {"channel": 0, "supergroup": 1, "group": 2, "private": 3}
+    sorted_chats = sorted(discovered.values(), key=lambda x: priority.get(x["type"], 9))
+    return sorted_chats
+
+
 @retry(
     reraise=True,
     stop=stop_after_attempt(3),
@@ -90,6 +137,7 @@ async def publish_offer_to_telegram(
     Publica la tarjeta generada en `BytesIO` en el canal de Telegram del clon llamando a
     `https://api.telegram.org/bot{token}/sendPhoto` con `parse_mode=HTML` y `reply_markup`
     conteniendo el botón inline `🔥 Ver Oferta Real Aquí`.
+    Si el `chat_id` devuelve `chat not found`, autodescubre el canal real vía `getUpdates`.
     """
     bot_token = (
         sys_settings.telegram_bot_token
@@ -117,9 +165,6 @@ async def publish_offer_to_telegram(
     }
 
     card_buffer.seek(0)
-    files = {
-        "photo": (f"{clone.clone_code}_offer.jpg", card_buffer.getvalue(), "image/jpeg"),
-    }
     data = {
         "chat_id": chat_id,
         "caption": caption_html[:1024],
@@ -167,8 +212,31 @@ async def publish_offer_to_telegram(
                 last_error_desc,
             )
 
+        # Si sigue dando chat not found, autodescubrir canales reales del bot vía getUpdates
         if response is None or response.status_code != 200:
-            raise RuntimeError(f"Telegram API ({response.status_code if response else 'ERR'}): {last_error_desc}")
+            detected_chats = await auto_detect_telegram_channels(bot_token)
+            for det in detected_chats:
+                for candidate_id in (det["id"], det["numeric_id"]):
+                    if candidate_id in candidate_chat_ids:
+                        continue
+                    data["chat_id"] = candidate_id
+                    files = {
+                        "photo": (f"{clone.clone_code}_offer.jpg", card_buffer.getvalue(), "image/jpeg"),
+                    }
+                    response = await client.post(url, data=data, files=files)
+                    if response.status_code == 200:
+                        clone.telegram_channel_id = candidate_id
+                        if sys_settings:
+                            sys_settings.admin_telegram_chat_id = candidate_id
+                        break
+                if response is not None and response.status_code == 200:
+                    break
+
+        if response is None or response.status_code != 200:
+            raise RuntimeError(
+                f"Telegram ({response.status_code if response else 'ERR'}): {last_error_desc} "
+                f"(Mete a tu Bot como Administrador del canal y escribe 'hola' en el canal)"
+            )
         result = response.json()
 
     logger.info(
