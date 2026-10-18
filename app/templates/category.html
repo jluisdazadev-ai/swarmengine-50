@@ -43,9 +43,15 @@
     <article class="bg-slate-900 border border-slate-800 hover:border-emerald-500/50 rounded-xl overflow-hidden flex flex-col">
         <div class="relative bg-white p-4 h-56 flex items-center justify-center">
             <img src="{{ offer.image_url }}" alt="{{ offer.title }}" loading="lazy" class="max-h-full max-w-full object-contain">
+            {% if offer.discount_percent and offer.discount_percent > 0 and offer.original_price > offer.sale_price %}
             <span class="absolute top-3 right-3 bg-rose-600 text-white text-xs font-extrabold px-2.5 py-1 rounded-full">
                 -{{ offer.discount_percent|round|int }}% OFF
             </span>
+            {% else %}
+            <span class="absolute top-3 right-3 bg-emerald-600 text-white text-xs font-extrabold px-2.5 py-1 rounded-full">
+                🔥 Oferta Oficial
+            </span>
+            {% endif %}
         </div>
         <div class="p-5 flex-1 flex flex-col justify-between">
             <div>
@@ -56,7 +62,9 @@
                 </h2>
                 <div class="flex items-baseline gap-2 mb-4">
                     <span class="text-2xl font-extrabold text-emerald-400">{{ format_currency(offer.sale_price, offer.currency) }}</span>
+                    {% if offer.original_price > offer.sale_price %}
                     <span class="text-xs text-slate-500 line-through">{{ format_currency(offer.original_price, offer.currency) }}</span>
+                    {% endif %}
                 </div>
             </div>
             <div class="flex items-center gap-2 pt-3 border-t border-slate-800">

@@ -23,9 +23,15 @@
 <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
     <div class="lg:col-span-5 bg-white rounded-2xl p-6 flex items-center justify-center relative border border-slate-800">
         <img src="{{ offer.image_url }}" alt="{{ offer.title }}" class="max-h-96 object-contain">
+        {% if offer.discount_percent and offer.discount_percent > 0 and offer.original_price > offer.sale_price %}
         <span class="absolute top-4 right-4 bg-rose-600 text-white text-sm font-black px-3.5 py-1.5 rounded-full shadow-lg">
             -{{ offer.discount_percent|round|int }}% OFF
         </span>
+        {% else %}
+        <span class="absolute top-4 right-4 bg-emerald-600 text-white text-sm font-black px-3.5 py-1.5 rounded-full shadow-lg">
+            🔥 Oferta Oficial
+        </span>
+        {% endif %}
     </div>
 
     <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 flex flex-col justify-between">
@@ -43,16 +49,20 @@
             </h1>
 
             <div class="bg-slate-950 border border-slate-800 rounded-xl p-5 mb-6">
+                {% if offer.original_price > offer.sale_price %}
                 <div class="text-xs text-slate-400 mb-1">
                     Precio anterior: <span class="line-through text-slate-500">{{ format_currency(offer.original_price, offer.currency) }}</span>
                 </div>
+                {% endif %}
                 <div class="flex flex-wrap items-baseline gap-3">
                     <span class="text-3xl sm:text-4xl font-black text-emerald-400">
                         {{ format_currency(offer.sale_price, offer.currency) }}
                     </span>
+                    {% if offer.original_price > offer.sale_price %}
                     <span class="text-xs font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-md">
                         Ahorras {{ savings_formatted }} hoy
                     </span>
+                    {% endif %}
                 </div>
                 {% if offer.source_marketplace.value == 'HOTMART' %}
                 <div class="mt-4 pt-3 border-t border-slate-800/80 flex flex-wrap items-center gap-2 text-[11px] text-slate-300">

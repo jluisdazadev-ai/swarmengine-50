@@ -551,13 +551,38 @@ async def admin_fix_hotmart_prices(
 
     stats = await audit_and_fix_published_and_pool_prices(session=session)
     msg = (
-        f"Precios+corregidos:+{stats.get('offers_fixed', 0)}+ofertas+publicadas+y+"
-        f"{stats.get('pool_fixed', 0)}+productos+en+cola+actualizados+al+precio+real+maximo"
+        f"Precios+y+Ganchos+corregidos:+{stats.get('offers_fixed', 0)}+ofertas+publicadas+actualizadas+con+gancho+(-50%+OFF),+"
+        f"{stats.get('cards_regenerated', 0)}+tarjetas+regeneradas+y+{stats.get('pool_fixed', 0)}+en+cola+ajustados"
     )
     if stats.get("brazil_deleted", 0) > 0:
         msg += f"+({stats['brazil_deleted']}+productos+de+Brasil+eliminados)"
     return RedirectResponse(
         url=f"/admin?msg={msg}",
+        status_code=302,
+    )
+
+
+@router.post("/clones/sync-and-activate-50")
+async def sync_and_activate_50_clones(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """
+    Sincroniza y activa en 1 clic los 50 Micro-Bots con los nichos de mayor demanda
+    y rentabilidad comercial en Hotmart, e inicia la programación automática de la flota completa.
+    """
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    from app.services.seeder import seed_initial_clones
+    from app.scheduler import schedule_single_clone_job
+
+    all_clones = await seed_initial_clones(session=session)
+    for c in all_clones:
+        schedule_single_clone_job(c)
+
+    return RedirectResponse(
+        url=f"/admin?msg=Flota+completa+de+{len(all_clones)}+Micro-Bots+activada+y+sincronizada+con+los+nichos+mas+rentables+de+Hotmart",
         status_code=302,
     )
 

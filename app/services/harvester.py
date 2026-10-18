@@ -466,11 +466,14 @@ class HotmartHarvester(BaseMarketplaceHarvester):
                 ):
                     continue
 
-                sale_p = Decimal(str(round(float(prod.get("sale_price") or 49.0), 2)))
-                if sale_p <= Decimal("0.00"):
-                    sale_p = Decimal("49.00")
-                orig_p = sale_p
-                disc_p = Decimal("0.00")
+                from app.services.hotmart_sync import (
+                    calculate_hotmart_pricing_and_hook,
+                    clean_product_title,
+                )
+
+                raw_sp = float(prod.get("sale_price") or 49.0)
+                orig_p, sale_p, disc_p = calculate_hotmart_pricing_and_hook(raw_sp)
+                clean_title = clean_product_title(str(prod["title"]))[:500]
 
                 existing_pool = (
                     await session.execute(
@@ -484,7 +487,7 @@ class HotmartHarvester(BaseMarketplaceHarvester):
                     pool_item = HotmartProductPool(
                         clone_id=clone.id,
                         external_item_id=external_id,
-                        title=str(prod["title"])[:500],
+                        title=clean_title,
                         hotlink_url=prod_url,
                         image_url=str(prod["image_url"]),
                         original_price=orig_p,
@@ -501,7 +504,7 @@ class HotmartHarvester(BaseMarketplaceHarvester):
                     HarvestedCandidate(
                         external_item_id=external_id,
                         source_marketplace=MarketplaceEnum.HOTMART,
-                        title=str(prod["title"])[:500],
+                        title=clean_title,
                         original_price=orig_p,
                         sale_price=sale_p,
                         discount_percent=disc_p,

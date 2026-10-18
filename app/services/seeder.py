@@ -722,17 +722,17 @@ async def seed_initial_clones(session: AsyncSession) -> List[BotClone]:
         code = blueprint["clone_code"]
         if code in existing_by_code:
             existing_clone = existing_by_code[code]
-            if existing_clone.pseo_category_slug != blueprint["pseo_category_slug"]:
-                existing_clone.niche_name = blueprint["niche_name"]
-                existing_clone.search_keywords = blueprint["search_keywords"]
-                existing_clone.negative_keywords = blueprint["negative_keywords"]
-                existing_clone.min_discount_percent = blueprint["min_discount_percent"]
-                existing_clone.min_price = blueprint["min_price"]
-                existing_clone.max_price = blueprint["max_price"]
-                existing_clone.telegram_channel_id = blueprint["telegram_channel_id"]
-                existing_clone.pseo_category_slug = blueprint["pseo_category_slug"]
-                existing_clone.persona_prompt_style = blueprint["persona_prompt_style"]
-                updated_count += 1
+            existing_clone.is_active = True
+            existing_clone.niche_name = blueprint["niche_name"]
+            existing_clone.search_keywords = blueprint["search_keywords"]
+            existing_clone.negative_keywords = blueprint["negative_keywords"]
+            existing_clone.min_discount_percent = blueprint["min_discount_percent"]
+            existing_clone.min_price = blueprint["min_price"]
+            existing_clone.max_price = blueprint["max_price"]
+            existing_clone.telegram_channel_id = blueprint["telegram_channel_id"]
+            existing_clone.pseo_category_slug = blueprint["pseo_category_slug"]
+            existing_clone.persona_prompt_style = blueprint["persona_prompt_style"]
+            updated_count += 1
             continue
 
         clone = BotClone(

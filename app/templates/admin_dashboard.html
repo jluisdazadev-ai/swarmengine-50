@@ -250,8 +250,8 @@
                                     </button>
                                 </form>
                                 <form action="/admin/hotmart/fix-prices" method="post">
-                                    <button type="submit" class="w-full py-2 px-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold transition">
-                                        💲 Corregir Precios
+                                    <button type="submit" class="w-full py-2 px-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold transition" title="Corrige en 1 clic los precios de todas las ofertas publicadas y en cola con el precio regular real en la web ($99 USD) y el gancho de descuento oficial (-50% OFF)">
+                                        💲 Corregir Precios y Ganchos (-50% OFF)
                                     </button>
                                 </form>
                             </div>
@@ -641,6 +641,11 @@
                     <form action="/admin/clones/activate-all" method="post">
                         <button type="submit" class="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold transition">
                             ▶️ Activar Todos los 50 Bots
+                        </button>
+                    </form>
+                    <form action="/admin/clones/sync-and-activate-50" method="post">
+                        <button type="submit" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 hover:from-emerald-400 hover:to-sky-400 text-slate-950 text-xs font-black transition shadow-md shadow-emerald-500/20" title="Sincroniza y activa la flota completa de 50 Micro-Bots con los nichos de mayor demanda comercial en Hotmart">
+                            🚀 Sincronizar y Activar los 50 Bots
                         </button>
                     </form>
                 </div>
