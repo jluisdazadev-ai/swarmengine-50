@@ -252,6 +252,63 @@
             </div>
         </section>
 
+        {% if recent_offers %}
+        <!-- Últimas Ofertas Publicadas por los Bots -->
+        <section class="bg-slate-900 border border-emerald-500/30 rounded-2xl overflow-hidden">
+            <div class="p-5 border-b border-slate-800 flex items-center justify-between">
+                <div>
+                    <h2 class="text-base font-extrabold text-emerald-400">✅ Últimas Ofertas Publicadas en Vivo ({{ recent_offers|length }} recientes)</h2>
+                    <p class="text-xs text-slate-400">Cada vez que un Micro-Bot se ejecuta con éxito, su oferta, tarjeta 1080x1080 y enlace corto aparecen aquí.</p>
+                </div>
+                <a href="/" target="_blank" class="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold hover:bg-emerald-500/30">
+                    🌐 Abrir Portal Público ↗
+                </a>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead>
+                        <tr class="border-b border-slate-800 bg-slate-950/60 text-slate-400 uppercase">
+                            <th class="py-2.5 px-4">Bot</th>
+                            <th class="py-2.5 px-4">Oferta Publicada</th>
+                            <th class="py-2.5 px-4">Precio / Descuento</th>
+                            <th class="py-2.5 px-4">Canales</th>
+                            <th class="py-2.5 px-4 text-right">Enlaces En Vivo</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/70">
+                        {% for off in recent_offers %}
+                        <tr class="hover:bg-slate-800/40">
+                            <td class="py-2.5 px-4 font-mono font-bold text-emerald-400">
+                                {{ off.clone.clone_code if off.clone else off.clone_id }}
+                            </td>
+                            <td class="py-2.5 px-4 text-white font-semibold truncate max-w-sm">
+                                {{ off.title }}
+                            </td>
+                            <td class="py-2.5 px-4 font-mono text-emerald-300">
+                                ${{ "%.2f"|format(off.sale_price) }} {{ off.currency }} (-{{ off.discount_percent|round|int }}%)
+                            </td>
+                            <td class="py-2.5 px-4 space-x-1">
+                                <span class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Web pSEO ✅</span>
+                                {% if off.published_telegram %}
+                                <span class="px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">Telegram ✅</span>
+                                {% else %}
+                                <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-400" title="Falta configurar Telegram Bot Token o hacer el bot Admin del canal">Telegram ⏸️</span>
+                                {% endif %}
+                            </td>
+                            <td class="py-2.5 px-4 text-right space-x-2">
+                                {% if off.clone %}
+                                <a href="/c/{{ off.clone.pseo_category_slug }}" target="_blank" class="text-sky-400 hover:underline font-semibold">Ver Página ↗</a>
+                                {% endif %}
+                                <a href="/go/{{ off.short_code }}" target="_blank" class="font-mono text-orange-300 hover:underline">/go/{{ off.short_code }} ↗</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        {% endif %}
+
         <!-- Tabla de los 50 Micro-Bots -->
         <section class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
             <div class="p-6 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

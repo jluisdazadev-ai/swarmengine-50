@@ -190,6 +190,14 @@ async def admin_dashboard_view(
     )
     hotmart_items = list((await session.execute(hotmart_stmt)).scalars().all())
 
+    recent_offers_stmt = (
+        select(ProductOffer)
+        .options(selectinload(ProductOffer.clone))
+        .order_by(desc(ProductOffer.detected_at))
+        .limit(15)
+    )
+    recent_offers = list((await session.execute(recent_offers_stmt)).scalars().all())
+
     return templates.TemplateResponse(
         request=request,
         name="admin_dashboard.html",
@@ -197,6 +205,7 @@ async def admin_dashboard_view(
             "sys_settings": sys_settings,
             "clone_table": clone_table,
             "hotmart_items": hotmart_items,
+            "recent_offers": recent_offers,
             "total_clones": len(clone_table),
             "active_bots_count": active_bots_count,
             "global_clicks": global_clicks,
@@ -414,10 +423,9 @@ async def toggle_clone_active_state(
 async def trigger_clone_manual_execution(
     clone_id: int,
     request: Request,
-    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_db_session),
 ) -> Response:
-    """Dispara en 1 clic la cosecha, redacción con Gemini y publicación inmediata de un clon."""
+    """Dispara en 1 clic la cosecha, redacción con Gemini y publicación inmediata de un clon, devolviendo el resultado real."""
     if not is_admin_authenticated(request):
         raise HTTPException(status_code=401, detail="No autorizado.")
 
@@ -425,18 +433,42 @@ async def trigger_clone_manual_execution(
     if clone is None:
         raise HTTPException(status_code=404, detail="Clon no encontrado.")
 
-    background_tasks.add_task(execute_clone_pipeline, clone.id, True)
+    try:
+        result = await execute_clone_pipeline(clone.id, True)
+    except Exception as exc:
+        logger.exception("Error ejecutando manualmente %s: %s", clone.clone_code, exc)
+        result = {"status": "error", "reason": str(exc)}
 
+    status = str(result.get("status", ""))
     if request.headers.get("HX-Request") == "true":
+        if status == "published":
+            short_code = result.get("short_code", "")
+            return HTMLResponse(
+                content=(
+                    f'<div class="flex flex-col items-center gap-1">'
+                    f'<span class="px-2 py-0.5 text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded">✅ ¡Publicada!</span>'
+                    f'<a href="/c/{clone.pseo_category_slug}" target="_blank" class="text-[11px] text-sky-400 hover:underline">Ver en Portal ↗</a>'
+                    f'<span class="text-[10px] text-slate-400 font-mono">/go/{short_code}</span>'
+                    f'</div>'
+                )
+            )
+        if status == "no_deals":
+            return HTMLResponse(
+                content=(
+                    '<span class="px-2 py-1 text-[11px] font-medium bg-amber-500/20 text-amber-300 '
+                    'border border-amber-500/40 rounded" title="Agrega un HotLink para este bot o usa el Auto-Explorador">⚠️ Sin links nuevos en cola</span>'
+                )
+            )
+        reason = str(result.get("reason", status))[:50]
         return HTMLResponse(
             content=(
-                f'<span class="px-2.5 py-1 text-xs font-medium bg-indigo-500/20 text-indigo-300 '
-                f'border border-indigo-500/40 rounded">⚡ Ejecutando {clone.clone_code}...</span>'
+                f'<span class="px-2 py-1 text-[11px] font-medium bg-rose-500/20 text-rose-300 '
+                f'border border-rose-500/40 rounded">⚠️ {reason}</span>'
             )
         )
 
     return RedirectResponse(
-        url=f"/admin?msg=Ejecucion+manual+iniciada+para+{clone.clone_code}",
+        url=f"/admin?msg=Resultado+{clone.clone_code}:+{status}",
         status_code=302,
     )
 

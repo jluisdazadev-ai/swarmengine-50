@@ -250,16 +250,41 @@ async def generate_offer_copy_with_gemini(
             f"Presupuesto diario global de Gemini agotado (${current_spend:.4f} / ${budget_limit:.2f} USD)."
         )
 
-    api_key = (sys_settings.gemini_api_key or settings.gemini_api_key).strip()
-    if not api_key:
-        raise ValueError(
-            "GEMINI_API_KEY no está configurada en SystemSettings ni en variables de entorno."
-        )
-
     savings_amount = candidate.original_price - candidate.sale_price
     orig_formatted = format_currency_amount(candidate.original_price, candidate.currency)
     sale_formatted = format_currency_amount(candidate.sale_price, candidate.currency)
     savings_formatted = format_currency_amount(savings_amount, candidate.currency)
+
+    api_key = (sys_settings.gemini_api_key or settings.gemini_api_key).strip()
+    if not api_key:
+        logger.warning(
+            "[%s] GEMINI_API_KEY no configurada; usando redacción estructurada de respaldo para publicar la oferta.",
+            clone.clone_code,
+        )
+        fallback_content = GeneratedOfferContent(
+            hook_headline=f"OFERTA -{int(round(candidate.discount_percent))}% HOY",
+            telegram_post_html=(
+                f"🔥 <b>{html.escape(candidate.title)}</b>\n\n"
+                f"❌ Antes: <s>{orig_formatted}</s>\n"
+                f"✅ <b>Hoy: {sale_formatted} (-{int(round(candidate.discount_percent))}%)</b>\n"
+                f"💰 Ahorras {savings_formatted} · Acceso inmediato y Garantía de 7 días."
+            ),
+            seo_meta_description=(
+                f"Oferta verificada en {clone.niche_name}: {candidate.title} con {int(round(candidate.discount_percent))}% de descuento. Ahorra {savings_formatted} hoy."
+            )[:155],
+            seo_mini_review_html=(
+                f"<h3>Análisis de la Oferta: {html.escape(candidate.title)}</h3>"
+                f"<p>Esta oportunidad destacada dentro de la categoría <strong>{html.escape(clone.niche_name)}</strong> "
+                f"permite acceder con un descuento verificado del <strong>-{int(round(candidate.discount_percent))}%</strong>, "
+                f"reduciendo su precio habitual de {orig_formatted} a <strong>{sale_formatted}</strong> (ahorro directo de {savings_formatted}).</p>"
+                "<ul>"
+                "<li><strong>Acceso 100% Online 24/7:</strong> Disponible inmediatamente desde EE.UU., México, España, Colombia y Chile.</li>"
+                "<li><strong>Garantía Oficial:</strong> Respaldo de satisfacción de 7 días y certificado al finalizar.</li>"
+                "<li><strong>Pago Seguro en Moneda Local:</strong> Conversión automática en el checkout oficial.</li>"
+                "</ul>"
+            ),
+        )
+        return fallback_content, 0, 0, Decimal("0.000000")
 
     is_hotmart = candidate.source_marketplace.value == "HOTMART"
     market_context_rules = (
