@@ -820,16 +820,20 @@ def _call_gemini_for_niche_batch(
         "- persona_prompt_style: Instrucción de voz experta para redactar reseñas persuasivas en español neutro."
     )
 
-    response = client.models.generate_content(
-        model=settings.gemini_model_name,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=GeneratedNicheBatchResponse,
-            temperature=0.7,
-        ),
-    )
-    return response
+    for model_name in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash"]:
+        try:
+            return client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=GeneratedNicheBatchResponse,
+                    temperature=0.7,
+                ),
+            )
+        except Exception as exc:
+            logger.warning("Modelo Gemini '%s' devolvió error en generación de lote (%s), probando siguiente...", model_name, exc)
+    raise RuntimeError("Ningún modelo Gemini estuvo disponible para generar el lote.")
 
 
 async def generate_new_clone_batch_with_gemini(

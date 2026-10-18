@@ -242,15 +242,20 @@ def _classify_hotlinks_with_gemini_sync(
         "2. Redacta un `optimized_title` claro, persuasivo y sin símbolos basura.\n"
         "3. Define `estimated_original_price_usd` y `estimated_sale_price_usd` (donde original sea al menos el doble del precio de oferta para reflejar el cupón del 50% OFF)."
     )
-    return client.models.generate_content(
-        model=settings.gemini_model_name,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=BatchHotmartAssignmentResponse,
-            temperature=0.2,
-        ),
-    )
+    for model_name in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash"]:
+        try:
+            return client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=BatchHotmartAssignmentResponse,
+                    temperature=0.2,
+                ),
+            )
+        except Exception as exc:
+            logger.warning("Modelo Gemini '%s' devolvió error en clasificador Hotmart (%s), probando siguiente...", model_name, exc)
+    raise RuntimeError("Ningún modelo Gemini respondió para clasificación en bloque.")
 
 
 async def bulk_auto_assign_hotlinks_with_ai(

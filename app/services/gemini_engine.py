@@ -162,28 +162,45 @@ async def check_daily_budget_available(
     return (current_spend < budget_limit, current_spend, budget_limit)
 
 
-@retry(
-    reraise=True,
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1.5, min=2.0, max=15.0),
-    retry=retry_if_exception_type(Exception),
-)
+GEMINI_MODEL_CANDIDATES = [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-1.5-flash",
+]
+
+
 def _invoke_gemini_structured_offer(
     api_key: str,
     prompt: str,
 ) -> types.GenerateContentResponse:
-    """Ejecuta la llamada real al SDK `google-genai` con `gemini-2.5-flash` y `response_schema`."""
+    """
+    Ejecuta la llamada real al SDK `google-genai` con `response_schema`,
+    probando en cascada los modelos Flash disponibles en la cuenta para evitar errores 404 NOT_FOUND.
+    """
     client = genai.Client(api_key=api_key)
-    response = client.models.generate_content(
-        model=settings.gemini_model_name,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=GeneratedOfferContent,
-            temperature=0.65,
-        ),
-    )
-    return response
+    ordered_models = [settings.gemini_model_name] + [
+        m for m in GEMINI_MODEL_CANDIDATES if m != settings.gemini_model_name
+    ]
+    last_exc: Optional[Exception] = None
+    for model_name in ordered_models:
+        try:
+            return client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=GeneratedOfferContent,
+                    temperature=0.65,
+                ),
+            )
+        except Exception as exc:
+            logger.warning("Modelo Gemini '%s' no disponible (%s), probando siguiente candidato...", model_name, exc)
+            last_exc = exc
+
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("No se pudo invocar ningún modelo Gemini.")
 
 
 async def record_gemini_token_usage(
@@ -227,6 +244,40 @@ async def record_gemini_token_usage(
     return exact_cost
 
 
+def _build_fallback_offer_content(
+    clone: BotClone,
+    candidate: HarvestedCandidate,
+    orig_formatted: str,
+    sale_formatted: str,
+    savings_formatted: str,
+) -> GeneratedOfferContent:
+    """Construye una redacción persuasiva en español neutro si la API de Gemini no está configurada o devuelve error."""
+    disc_int = int(round(candidate.discount_percent))
+    return GeneratedOfferContent(
+        hook_headline=f"CERTIFÍCATE HOY -{disc_int}% OFF",
+        telegram_post_html=(
+            f"🔥 <b>{html.escape(candidate.title)}</b>\n\n"
+            f"❌ Antes: <s>{orig_formatted}</s>\n"
+            f"✅ <b>Hoy: {sale_formatted} (-{disc_int}% OFF)</b>\n"
+            f"💰 Ahorras {savings_formatted} · Acceso online inmediato, Certificado y Garantía de 7 días."
+        ),
+        seo_meta_description=(
+            f"Oferta verificada en {clone.niche_name}: {candidate.title} con {disc_int}% de descuento. Ahorra {savings_formatted} hoy."
+        )[:155],
+        seo_mini_review_html=(
+            f"<h3>Análisis Experto: {html.escape(candidate.title)}</h3>"
+            f"<p>Esta oportunidad destacada en <strong>{html.escape(clone.niche_name)}</strong> "
+            f"te permite acceder con un descuento especial verificado del <strong>-{disc_int}%</strong>, "
+            f"reduciendo su precio habitual de {orig_formatted} a tan solo <strong>{sale_formatted}</strong> (ahorro directo de {savings_formatted}).</p>"
+            "<ul>"
+            "<li><strong>Acceso 100% Online 24/7:</strong> Disponible de inmediato desde EE.UU., México, España, Colombia y Chile.</li>"
+            "<li><strong>Certificado y Garantía Oficial:</strong> Incluye respaldo de satisfacción de 7 días en Hotmart y certificado internacional al finalizar.</li>"
+            "<li><strong>Pago Seguro en Moneda Local:</strong> Conversión automática en el checkout oficial (Tarjeta, PayPal, OXXO/SPEI, PSE/Nequi, WebPay).</li>"
+            "</ul>"
+        ),
+    )
+
+
 async def generate_offer_copy_with_gemini(
     session: AsyncSession,
     clone: BotClone,
@@ -234,9 +285,9 @@ async def generate_offer_copy_with_gemini(
     sys_settings: Optional[SystemSettings] = None,
 ) -> Tuple[GeneratedOfferContent, int, int, Decimal]:
     """
-    Genera el contenido estructurado de una oferta (`GeneratedOfferContent`) con Gemini 2.5 Flash,
+    Genera el contenido estructurado de una oferta (`GeneratedOfferContent`) con Gemini,
     contabiliza los tokens de entrada y salida desde `response.usage_metadata`
-    y registra el costo real en `DailyCloneMetrics`.
+    y registra el costo real en `DailyCloneMetrics`. Si la API falla o da 404, usa redacción de respaldo.
     """
     if sys_settings is None:
         sys_settings = await ensure_system_settings(session)
@@ -261,30 +312,12 @@ async def generate_offer_copy_with_gemini(
             "[%s] GEMINI_API_KEY no configurada; usando redacción estructurada de respaldo para publicar la oferta.",
             clone.clone_code,
         )
-        fallback_content = GeneratedOfferContent(
-            hook_headline=f"OFERTA -{int(round(candidate.discount_percent))}% HOY",
-            telegram_post_html=(
-                f"🔥 <b>{html.escape(candidate.title)}</b>\n\n"
-                f"❌ Antes: <s>{orig_formatted}</s>\n"
-                f"✅ <b>Hoy: {sale_formatted} (-{int(round(candidate.discount_percent))}%)</b>\n"
-                f"💰 Ahorras {savings_formatted} · Acceso inmediato y Garantía de 7 días."
-            ),
-            seo_meta_description=(
-                f"Oferta verificada en {clone.niche_name}: {candidate.title} con {int(round(candidate.discount_percent))}% de descuento. Ahorra {savings_formatted} hoy."
-            )[:155],
-            seo_mini_review_html=(
-                f"<h3>Análisis de la Oferta: {html.escape(candidate.title)}</h3>"
-                f"<p>Esta oportunidad destacada dentro de la categoría <strong>{html.escape(clone.niche_name)}</strong> "
-                f"permite acceder con un descuento verificado del <strong>-{int(round(candidate.discount_percent))}%</strong>, "
-                f"reduciendo su precio habitual de {orig_formatted} a <strong>{sale_formatted}</strong> (ahorro directo de {savings_formatted}).</p>"
-                "<ul>"
-                "<li><strong>Acceso 100% Online 24/7:</strong> Disponible inmediatamente desde EE.UU., México, España, Colombia y Chile.</li>"
-                "<li><strong>Garantía Oficial:</strong> Respaldo de satisfacción de 7 días y certificado al finalizar.</li>"
-                "<li><strong>Pago Seguro en Moneda Local:</strong> Conversión automática en el checkout oficial.</li>"
-                "</ul>"
-            ),
+        return (
+            _build_fallback_offer_content(clone, candidate, orig_formatted, sale_formatted, savings_formatted),
+            0,
+            0,
+            Decimal("0.000000"),
         )
-        return fallback_content, 0, 0, Decimal("0.000000")
 
     is_hotmart = candidate.source_marketplace.value == "HOTMART"
     market_context_rules = (
@@ -321,35 +354,46 @@ async def generate_offer_copy_with_gemini(
         "la garantía de 7 días y para qué perfil de estudiante o profesional en EE.UU., México, España, Colombia o Chile es ideal."
     )
 
-    response = await asyncio.to_thread(
-        _invoke_gemini_structured_offer,
-        api_key,
-        prompt,
-    )
+    try:
+        response = await asyncio.to_thread(
+            _invoke_gemini_structured_offer,
+            api_key,
+            prompt,
+        )
+        parsed_content = GeneratedOfferContent.model_validate_json(response.text)
+        parsed_content.hook_headline = enforce_hook_word_limit(parsed_content.hook_headline, max_words=5)
+        parsed_content.telegram_post_html = sanitize_telegram_html(parsed_content.telegram_post_html)
+        parsed_content.seo_meta_description = parsed_content.seo_meta_description.strip()[:155]
 
-    parsed_content = GeneratedOfferContent.model_validate_json(response.text)
-    parsed_content.hook_headline = enforce_hook_word_limit(parsed_content.hook_headline, max_words=5)
-    parsed_content.telegram_post_html = sanitize_telegram_html(parsed_content.telegram_post_html)
-    parsed_content.seo_meta_description = parsed_content.seo_meta_description.strip()[:155]
+        usage = response.usage_metadata
+        prompt_tokens = int(getattr(usage, "prompt_token_count", 0) or 0) if usage else 0
+        candidate_tokens = int(getattr(usage, "candidates_token_count", 0) or 0) if usage else 0
 
-    usage = response.usage_metadata
-    prompt_tokens = int(getattr(usage, "prompt_token_count", 0) or 0) if usage else 0
-    candidate_tokens = int(getattr(usage, "candidates_token_count", 0) or 0) if usage else 0
+        cost_usd = await record_gemini_token_usage(
+            session=session,
+            clone_id=clone.id,
+            input_tokens=prompt_tokens,
+            output_tokens=candidate_tokens,
+        )
 
-    cost_usd = await record_gemini_token_usage(
-        session=session,
-        clone_id=clone.id,
-        input_tokens=prompt_tokens,
-        output_tokens=candidate_tokens,
-    )
-
-    logger.info(
-        "[%s] Gemini 2.5 Flash redactó oferta '%s' | Tokens In=%d Out=%d | Costo=$%s USD",
-        clone.clone_code,
-        candidate.external_item_id,
-        prompt_tokens,
-        candidate_tokens,
-        f"{cost_usd:.6f}",
-    )
-
-    return parsed_content, prompt_tokens, candidate_tokens, cost_usd
+        logger.info(
+            "[%s] Gemini redactó oferta '%s' | Tokens In=%d Out=%d | Costo=$%s USD",
+            clone.clone_code,
+            candidate.external_item_id,
+            prompt_tokens,
+            candidate_tokens,
+            f"{cost_usd:.6f}",
+        )
+        return parsed_content, prompt_tokens, candidate_tokens, cost_usd
+    except Exception as gemini_exc:
+        logger.warning(
+            "[%s] Fallback activado tras error en API Gemini (%s); publicando con plantilla de alta conversión.",
+            clone.clone_code,
+            gemini_exc,
+        )
+        return (
+            _build_fallback_offer_content(clone, candidate, orig_formatted, sale_formatted, savings_formatted),
+            0,
+            0,
+            Decimal("0.000000"),
+        )
