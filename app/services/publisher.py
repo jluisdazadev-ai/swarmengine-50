@@ -130,6 +130,21 @@ async def publish_offer_to_telegram(
     timeout = httpx.Timeout(connect=10.0, read=25.0, write=20.0, pool=10.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(url, data=data, files=files)
+        if response.status_code != 200 and sys_settings and sys_settings.admin_telegram_chat_id.strip():
+            fallback_chat = sys_settings.admin_telegram_chat_id.strip()
+            if fallback_chat != chat_id:
+                logger.info(
+                    "[%s] Canal %s no encontrado; enviando al Canal Maestro %s",
+                    clone.clone_code,
+                    chat_id,
+                    fallback_chat,
+                )
+                data["chat_id"] = fallback_chat
+                files = {
+                    "photo": (f"{clone.clone_code}_offer.jpg", card_buffer.getvalue(), "image/jpeg"),
+                }
+                response = await client.post(url, data=data, files=files)
+
         if response.status_code >= 500 or response.status_code == 429:
             response.raise_for_status()
         if response.status_code != 200:
@@ -145,7 +160,7 @@ async def publish_offer_to_telegram(
     logger.info(
         "[%s] Oferta publicada en Telegram (%s) message_id=%s",
         clone.clone_code,
-        chat_id,
+        data["chat_id"],
         result.get("result", {}).get("message_id"),
     )
     return result

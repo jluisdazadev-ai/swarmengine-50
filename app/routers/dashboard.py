@@ -654,6 +654,34 @@ async def delete_hotmart_pool_item(
     )
 
 
+@router.post("/clones/set-master-telegram")
+async def set_master_telegram_channel(
+    request: Request,
+    master_channel: str = Form(...),
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """Asigna en 1 clic un mismo Canal de Telegram (ej. @OfertasVeloz) a los 50 Micro-Bots."""
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    clean_channel = master_channel.strip()
+    if clean_channel and not clean_channel.startswith("@") and not clean_channel.startswith("-"):
+        clean_channel = f"@{clean_channel}"
+
+    if clean_channel:
+        sys_settings = await ensure_system_settings(session)
+        sys_settings.admin_telegram_chat_id = clean_channel
+        clones = list((await session.execute(select(BotClone))).scalars().all())
+        for clone in clones:
+            clone.telegram_channel_id = clean_channel
+        await session.commit()
+
+    return RedirectResponse(
+        url=f"/admin?msg=Canal+de+Telegram+{clean_channel}+asignado+a+los+50+Micro-Bots",
+        status_code=302,
+    )
+
+
 @router.post("/darwin/run")
 async def admin_trigger_darwin_cycle(
     request: Request,

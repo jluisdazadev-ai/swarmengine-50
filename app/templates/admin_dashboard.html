@@ -317,6 +317,19 @@
                     <p class="text-xs text-slate-400">Puedes pausar toda la flota mientras cargas enlaces y activarla cuando estés listo.</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
+                    <form action="/admin/clones/set-master-telegram" method="post" class="flex items-center gap-1.5">
+                        <input
+                            type="text"
+                            name="master_channel"
+                            required
+                            placeholder="@TuCanalTelegram"
+                            value="{{ sys_settings.admin_telegram_chat_id }}"
+                            class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white w-44"
+                        >
+                        <button type="submit" class="px-3 py-2 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-xs font-bold transition">
+                            ✈️ Asignar Canal a los 50 Bots
+                        </button>
+                    </form>
                     <form action="/admin/clones/pause-all" method="post">
                         <button type="submit" class="px-3.5 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition">
                             ⏸️ Pausar Todos los 50 Bots (Modo Carga)
