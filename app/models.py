@@ -42,6 +42,9 @@ class SystemSettings(Base):
     telegram_bot_token: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     admin_telegram_chat_id: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     telegram_channel_name: Mapped[str] = mapped_column(String(150), nullable=False, default="Canal Oficial de Ofertas")
+    autopilot_traffic_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    autopilot_interval_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    traffic_syndication_webhook_url: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     evolution_api_url: Mapped[str] = mapped_column(String(255), nullable=False, default="http://localhost:8080")
     evolution_api_key: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     base_shortlink_domain: Mapped[str] = mapped_column(

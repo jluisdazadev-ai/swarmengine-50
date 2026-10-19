@@ -14,7 +14,11 @@ from app.database import (
     redis_client,
 )
 from app.routers import dashboard, pseo, redirect, webhooks
-from app.scheduler import swarm_scheduler, sync_all_clone_jobs_in_scheduler
+from app.scheduler import (
+    schedule_autonomous_traffic_job,
+    swarm_scheduler,
+    sync_all_clone_jobs_in_scheduler,
+)
 from app.services.darwin import schedule_darwinian_monthly_job
 from app.services.seeder import seed_initial_clones
 
@@ -36,7 +40,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Ciclo de vida de producción de SwarmEngine 50:
     1. Crea o verifica las tablas en PostgreSQL 16 (incluyendo soporte Hotmart).
     2. Siembra automáticamente los 50 Micro-Bots iniciales y SystemSettings si no existen.
-    3. Registra en APScheduler los 50 trabajos escalonados con Jitter y el ciclo mensual Darwiniano.
+    3. Registra en APScheduler los 50 trabajos escalonados con Jitter, el motor de tráfico 24/7 y el ciclo mensual Darwiniano.
     4. Arranca el planificador asíncrono en segundo plano.
     """
     logger.info("Iniciando plataforma %s...", settings.app_name)
@@ -46,6 +50,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await seed_initial_clones(session)
 
     await sync_all_clone_jobs_in_scheduler()
+    schedule_autonomous_traffic_job()
     schedule_darwinian_monthly_job()
 
     if not swarm_scheduler.running:

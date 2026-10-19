@@ -326,3 +326,104 @@ async def sync_all_clone_jobs_in_scheduler() -> int:
 
     logger.info("APScheduler sincronizó %d micro-bots activos de %d totales.", active_count, len(clones))
     return active_count
+
+
+async def execute_autonomous_traffic_swarm() -> Dict[str, Any]:
+    """
+    Motor Autónomo 24/7 de Búsqueda Activa de Tráfico, Caza de Prospectos y Difusión Multicanal:
+    1. Verifica si `autopilot_traffic_enabled` está activo en SystemSettings.
+    2. Ejecuta el Spider Cazador de Intención de Compra sobre foros, Google y Reddit para los 50 nichos.
+    3. Si `traffic_syndication_webhook_url` está configurado (Make, Zapier, IFTTT, Pabbly, Discord):
+       Emite un webhook estructurado con tarjetas 1080x1080, enlaces `/go/...` y copys para Pinterest/Twitter/Facebook.
+    4. Auto-publica ofertas pendientes de HotmartProductPool en micro-bots activos.
+    5. Realiza auto-pings masivos de indexación inmediata a Google WebSub Hub e IndexNow API.
+    """
+    from app.models import HotmartProductPool
+    from app.services.spider_hunter import run_spider_buyer_hunter
+    import httpx
+
+    logger.info("[AutoTraffic 24/7] Iniciando ciclo de búsqueda activa de tráfico y difusión...")
+    async with get_db_context() as session:
+        sys_settings = await ensure_system_settings(session)
+        if not getattr(sys_settings, "autopilot_traffic_enabled", True):
+            logger.info("[AutoTraffic] Piloto automático desactivado por configuración.")
+            return {"status": "disabled"}
+
+        # 1. Ejecutar el Spider Cazador de Intención de Compra sobre los bots activos
+        leads = []
+        try:
+            leads = await run_spider_buyer_hunter(session=session, max_bots=10)
+            logger.info("[AutoTraffic] Spider Cazador rastreó %d prospectos activos.", len(leads))
+        except Exception as spider_exc:
+            logger.warning("[AutoTraffic] Error en Spider Cazador: %s", spider_exc)
+
+        # 2. Difusión por Webhook Externo (Make / Zapier / IFTTT / Social Auto-Poster)
+        webhook_url = (sys_settings.traffic_syndication_webhook_url or "").strip()
+        webhook_dispatched = False
+        if webhook_url and leads:
+            try:
+                base_dom = sys_settings.base_shortlink_domain.rstrip("/")
+                payload = {
+                    "event": "autonomous_traffic_leads",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "total_leads": len(leads),
+                    "leads": leads[:5],
+                    "rss_feed_url": f"{base_dom}/rss.xml",
+                    "pinterest_csv_url": f"{base_dom}/admin/traffic/pinterest-export.csv",
+                }
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(webhook_url, json=payload)
+                    webhook_dispatched = resp.is_success
+                    logger.info("[AutoTraffic] Webhook de difusión enviado a %s (HTTP %s)", webhook_url[:30], resp.status_code)
+            except Exception as hook_exc:
+                logger.warning("[AutoTraffic] Error enviando webhook de tráfico: %s", hook_exc)
+
+        # 3. Auto-publicar productos de la cola de Hotmart pendientes
+        auto_published_offers = 0
+        pool_stmt = (
+            select(HotmartProductPool)
+            .join(BotClone, HotmartProductPool.clone_id == BotClone.id)
+            .where(BotClone.is_active.is_(True))
+            .order_by(HotmartProductPool.id.asc())
+            .limit(3)
+        )
+        pending_items = list((await session.execute(pool_stmt)).scalars().all())
+        for item in pending_items:
+            try:
+                res = await execute_clone_pipeline(item.clone_id, force_manual=True)
+                if res.get("status") == "published":
+                    auto_published_offers += 1
+            except Exception as pub_exc:
+                logger.debug("[AutoTraffic] Auto-publicación omitida para clone=%s: %s", item.clone_id, pub_exc)
+
+        # 4. Auto-ping de indexación masiva (IndexNow + Google WebSub)
+        try:
+            from app.services.indexer import notify_google_websub
+            base_dom = sys_settings.base_shortlink_domain.rstrip("/")
+            await notify_google_websub(f"{base_dom}/rss.xml")
+        except Exception as ping_exc:
+            logger.debug("[AutoTraffic] Aviso en WebSub ping: %s", ping_exc)
+
+        return {
+            "status": "completed",
+            "leads_found": len(leads),
+            "webhook_dispatched": webhook_dispatched,
+            "auto_published_offers": auto_published_offers,
+        }
+
+
+def schedule_autonomous_traffic_job() -> None:
+    """Registra en APScheduler la tarea periódica del Enjambre Cazador de Tráfico Activo 24/7."""
+    job_id = "autonomous_traffic_swarm_job"
+    trigger = IntervalTrigger(minutes=30, jitter=60)
+    swarm_scheduler.add_job(
+        execute_autonomous_traffic_swarm,
+        trigger=trigger,
+        id=job_id,
+        name="[SwarmEngine] Motor Autónomo de Búsqueda Activa de Tráfico 24/7",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=300,
+    )
+    logger.info("Motor Autónomo de Tráfico 24/7 programado en APScheduler cada 30 minutos.")

@@ -1043,6 +1043,9 @@ async def update_system_settings(
     amazon_partner_tag: str = Form(""),
     aliexpress_tracking_id: str = Form(""),
     daily_global_budget_usd: float = Form(1.50),
+    autopilot_traffic_enabled: str = Form(""),
+    autopilot_interval_minutes: int = Form(30),
+    traffic_syndication_webhook_url: str = Form(""),
     session: AsyncSession = Depends(get_db_session),
 ) -> RedirectResponse:
     """Actualiza en caliente las credenciales y parámetros de `SystemSettings` en PostgreSQL."""
@@ -1079,9 +1082,30 @@ async def update_system_settings(
     sys_settings.amazon_partner_tag = amazon_partner_tag.strip()
     sys_settings.aliexpress_tracking_id = aliexpress_tracking_id.strip()
     sys_settings.daily_global_budget_usd = Decimal(str(round(daily_global_budget_usd, 2)))
+    sys_settings.autopilot_traffic_enabled = autopilot_traffic_enabled.lower() in ("true", "1", "on", "yes")
+    sys_settings.autopilot_interval_minutes = max(10, min(1440, autopilot_interval_minutes))
+    sys_settings.traffic_syndication_webhook_url = traffic_syndication_webhook_url.strip()
 
     await session.commit()
-    return RedirectResponse(url="/admin?msg=Configuracion+global+y+Canal+de+Telegram+actualizados", status_code=302)
+    return RedirectResponse(url="/admin?msg=Configuracion+global+y+Piloto+Automatico+de+Trafico+guardados", status_code=302)
+
+
+@router.post("/traffic/run-now")
+async def trigger_autonomous_traffic_swarm_now(
+    request: Request,
+) -> RedirectResponse:
+    """Ejecuta de inmediato un ciclo completo del Enjambre de Tráfico Autónomo 24/7."""
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    from app.scheduler import execute_autonomous_traffic_swarm
+    result = await execute_autonomous_traffic_swarm()
+    leads_count = result.get("leads_found", 0)
+    pubs_count = result.get("auto_published_offers", 0)
+    return RedirectResponse(
+        url=f"/admin?msg=Ciclo+de+Trafico+Autonomo+ejecutado:+{leads_count}+prospectos+rastreados,+{pubs_count}+ofertas+publicadas+y+pings+Google+enviados",
+        status_code=302,
+    )
 
 
 @router.post("/clones/generate-batch")

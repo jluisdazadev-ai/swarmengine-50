@@ -89,6 +89,9 @@ async def init_database() -> None:
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS hotmart_basic_auth TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE system_settings ALTER COLUMN hotmart_basic_auth TYPE TEXT",
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS telegram_channel_name VARCHAR(150) NOT NULL DEFAULT 'Canal Oficial de Ofertas'",
+            "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS autopilot_traffic_enabled BOOLEAN NOT NULL DEFAULT TRUE",
+            "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS autopilot_interval_minutes INTEGER NOT NULL DEFAULT 30",
+            "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS traffic_syndication_webhook_url VARCHAR(500) NOT NULL DEFAULT ''",
         ]
         for sql in migration_statements:
             await conn.execute(text(sql))
