@@ -9,14 +9,14 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Re
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeTimedSerializer
-from sqlalchemy import desc, func, select
+from sqlalchemy import delete, desc, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import BASE_DIR, get_settings
 from app.database import get_db_session
-from app.models import BotClone, DailyCloneMetrics, HotmartProductPool, ProductOffer
+from app.models import BotClone, ClickEvent, DailyCloneMetrics, HotmartProductPool, ProductOffer
 from app.scheduler import execute_clone_pipeline, schedule_single_clone_job
 from app.services.darwin import run_darwinian_evolution_cycle
 from app.services.harvester import extract_live_hotmart_metadata
@@ -732,6 +732,93 @@ async def trigger_spider_buyer_hunter(
     return RedirectResponse(
         url=f"/admin?msg=Spider+Cazador+encontro+{len(leads)}+conversaciones+de+compradores+potenciales+para+sembrar+cookies",
         status_code=302,
+    )
+
+
+@router.post("/traffic/reset-clicks")
+async def reset_traffic_clicks_telemetry(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+) -> RedirectResponse:
+    """
+    Limpia completamente el historial de clics previos inflados por precargas automáticas
+    del navegador (<link rel=prefetch>) o rastreadores de búsqueda (crawlers).
+    Permite empezar desde cero con métricas 100% reales y auditadas de compradores humanos.
+    """
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    await session.execute(delete(ClickEvent))
+    await session.execute(update(DailyCloneMetrics).values(total_clicks=0))
+    await session.commit()
+    return RedirectResponse(
+        url="/admin?msg=Telemetria+de+clics+reiniciada+a+0.+Se+eliminaron+precargas+falsas+y+ahora+solo+se+contaran+visitas+humanas+reales.",
+        status_code=302,
+    )
+
+
+@router.get("/traffic/pinterest-export.csv")
+async def export_pinterest_bulk_pins_csv(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    """
+    Genera y descarga en 1 clic un archivo CSV en el formato oficial de 'Bulk Pin Scheduler' de Pinterest Business.
+    Contiene título optimizado con gancho de descuento, tarjeta gráfica 1080x1080px y link directo `/go/{short_code}`.
+    """
+    if not is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+
+    import csv
+    import io
+
+    sys_settings = await ensure_system_settings(session)
+    base_domain = sys_settings.base_shortlink_domain.rstrip("/")
+
+    stmt = select(ProductOffer).options(selectinload(ProductOffer.clone)).order_by(desc(ProductOffer.detected_at))
+    offers = list((await session.execute(stmt)).scalars().all())
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Title",
+        "Media URL",
+        "Pinterest board",
+        "Thumbnail",
+        "Description",
+        "Link",
+        "Publish date",
+        "Keywords",
+    ])
+
+    for off in offers:
+        board_name = off.clone.niche_name if off.clone else "Cursos Online"
+        card_url = f"{base_domain}/static/cards/{off.short_code}.jpg"
+        target_link = f"{base_domain}/go/{off.short_code}"
+        disc = int(round(off.discount_percent)) if off.discount_percent else 50
+        title = f"{off.title[:90]} (-{disc}% OFF)"
+        desc_text = (
+            f"¿Quieres aprender {board_name}? Inscríbete en el programa oficial '{off.title}' "
+            f"con certificación y garantía oficial de 7 días. Precio rebajado a ${off.sale_price:.2f} {off.currency}. "
+            f"Ahorras {disc}% hoy. Acceso de por vida aquí: {target_link}"
+        )
+        kw = ", ".join(off.clone.search_keywords if off.clone and off.clone.search_keywords else ["cursos", "aprender", "oficios"])
+        writer.writerow([
+            title,
+            card_url,
+            board_name,
+            off.image_url,
+            desc_text,
+            target_link,
+            "",
+            kw,
+        ])
+
+    csv_data = output.getvalue()
+    return Response(
+        content=csv_data,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="pinterest_bulk_pins_swarm50.csv"'},
     )
 
 

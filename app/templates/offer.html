@@ -5,7 +5,6 @@
 {% block canonical %}<link rel="canonical" href="{{ canonical_url }}">{% endblock %}
 
 {% block head_extra %}
-<link rel="prefetch" href="/go/{{ offer.short_code }}">
 <script type="application/ld+json">
 {{ schema_json_ld|safe }}
 </script>

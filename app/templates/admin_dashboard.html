@@ -575,15 +575,24 @@
                         </p>
                     </div>
                 </div>
-                <div class="flex items-center gap-3 text-xs">
-                    <div class="bg-slate-950 px-3.5 py-2 rounded-xl border border-slate-800 flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2.5 text-xs">
+                    <span class="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-semibold text-[11px] flex items-center gap-1">
+                        <span>🛡️</span>
+                        <span>Filtro Anti-Bot &amp; Anti-Prefetch Activo (100% Clics Humanos)</span>
+                    </span>
+                    <div class="bg-slate-950 px-3.5 py-1.5 rounded-xl border border-slate-800 flex items-center gap-2">
                         <span class="text-slate-400">Clics Hoy:</span>
                         <span class="font-black text-sky-400 text-sm">{{ clicks_today_total }}</span>
                     </div>
-                    <div class="bg-slate-950 px-3.5 py-2 rounded-xl border border-slate-800 flex items-center gap-2">
+                    <div class="bg-slate-950 px-3.5 py-1.5 rounded-xl border border-slate-800 flex items-center gap-2">
                         <span class="text-slate-400">Clics Totales:</span>
                         <span class="font-black text-emerald-400 text-sm">{{ global_clicks }}</span>
                     </div>
+                    <form action="/admin/traffic/reset-clicks" method="post" onsubmit="return confirm('¿Deseas reiniciar el contador a 0 para borrar clics inflados por precargas previas y contar solo humanos reales?');">
+                        <button type="submit" class="px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-bold transition">
+                            🧹 Reiniciar Clics a 0
+                        </button>
+                    </form>
                 </div>
             </div>
 
@@ -668,6 +677,10 @@
                     </p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
+                    <a href="/admin/traffic/pinterest-export.csv" class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-black transition flex items-center gap-1.5 shadow-md shadow-rose-600/30" title="Descarga archivo CSV oficial para subir 50 pines automáticos a Pinterest Business con tarjeta 1080x1080 y links">
+                        <span>📌</span>
+                        <span>Exportar 50 Pines para Pinterest (CSV)</span>
+                    </a>
                     <form action="/admin/seo/ping-all" method="post">
                         <button type="submit" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold transition">
                             🚀 Impulsar en Google &amp; Bing Ahora (WebSub + IndexNow)
@@ -686,7 +699,7 @@
                             <th class="py-2.5 px-4">Oferta Publicada</th>
                             <th class="py-2.5 px-4">Precio / Descuento</th>
                             <th class="py-2.5 px-4">Motores de Tráfico Activos</th>
-                            <th class="py-2.5 px-4 text-right">Enlaces En Vivo</th>
+                            <th class="py-2.5 px-4 text-right">Enlaces / Difusión Rápida</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-800/70">
@@ -751,11 +764,54 @@
                                 </form>
                                 {% endif %}
                             </td>
-                            <td class="py-2.5 px-4 text-right space-x-2">
+                            <td class="py-2.5 px-4 text-right space-x-1.5">
+                                <details class="inline-block relative text-left">
+                                    <summary class="cursor-pointer px-2 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 font-bold text-[11px] transition inline-flex items-center gap-1 list-none">
+                                        <span>📢</span>
+                                        <span>Kit Ventas</span>
+                                    </summary>
+                                    <div class="absolute right-0 top-7 z-40 w-96 bg-slate-900 border border-slate-700 rounded-2xl p-4 shadow-2xl space-y-3 font-sans text-xs">
+                                        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                                            <span class="font-extrabold text-white text-xs">🚀 Kit de Difusión para Ventas Rápidas</span>
+                                            <span class="text-[10px] text-emerald-400 font-mono">-{{ off.discount_percent|round|int }}% OFF</span>
+                                        </div>
+                                        
+                                        <!-- Botones 1-Clic para compartir directo -->
+                                        <div>
+                                            <label class="block text-[10px] text-slate-400 font-bold uppercase mb-1">Compartir en 1 Clic con tu Link:</label>
+                                            <div class="grid grid-cols-4 gap-1.5">
+                                                <a href="https://api.whatsapp.com/send?text=Aprende%20{{ off.clone.niche_name|urlencode if off.clone else 'este%20oficio' }}%20con%20el%2050%25%20de%20descuento%20y%20garant%C3%ADa%20aqu%C3%AD:%20{{ sys_settings.base_shortlink_domain }}/go/{{ off.short_code }}" target="_blank" rel="noopener" class="py-1 px-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold text-center">
+                                                    WhatsApp
+                                                </a>
+                                                <a href="https://www.facebook.com/sharer/sharer.php?u={{ sys_settings.base_shortlink_domain }}/go/{{ off.short_code }}" target="_blank" rel="noopener" class="py-1 px-1 rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 text-[10px] font-bold text-center">
+                                                    Facebook
+                                                </a>
+                                                <a href="https://twitter.com/intent/tweet?text=Oferta%20verificada%20{{ off.title|urlencode }}&url={{ sys_settings.base_shortlink_domain }}/go/{{ off.short_code }}" target="_blank" rel="noopener" class="py-1 px-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[10px] font-bold text-center">
+                                                    X/Twitter
+                                                </a>
+                                                <a href="https://t.me/share/url?url={{ sys_settings.base_shortlink_domain }}/go/{{ off.short_code }}&text=Oferta%20{{ off.title|urlencode }}" target="_blank" rel="noopener" class="py-1 px-1 rounded bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-[10px] font-bold text-center">
+                                                    Telegram
+                                                </a>
+                                            </div>
+                                        </div>
+
+                                        <!-- Guión TikTok / Reels -->
+                                        <div>
+                                            <label class="block text-[10px] text-pink-400 font-bold uppercase mb-1">🎬 Guión TikTok / Reels (30 Segundos):</label>
+                                            <textarea readonly rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-[11px] text-slate-300 select-all font-mono" onclick="this.select()">¿Sabías que un profesional en {{ off.clone.niche_name if off.clone else 'este oficio' }} cobra más de $100 USD por servicio? Encontré el programa oficial '{{ off.title }}' con 50% de descuento ($49 USD) que te enseña desde cero con certificado y garantía de 7 días. El link con descuento está en mi perfil o pídeme info en comentarios.</textarea>
+                                        </div>
+
+                                        <!-- Post Grupos de Facebook -->
+                                        <div>
+                                            <label class="block text-[10px] text-blue-400 font-bold uppercase mb-1">📘 Post Consultivo para Grupos de Facebook:</label>
+                                            <textarea readonly rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-[11px] text-slate-300 select-all font-mono" onclick="this.select()">Hola comunidad. Para los que están buscando aprender {{ off.clone.niche_name if off.clone else 'este oficio' }} para trabajar o emprender este año, revisé este programa oficial certificado. Incluye prácticas paso a paso, acceso de por vida y 7 días de garantía. Además conseguí un cupón de 50% OFF por tiempo limitado. Les dejo el acceso oficial: {{ sys_settings.base_shortlink_domain }}/go/{{ off.short_code }}</textarea>
+                                        </div>
+                                    </div>
+                                </details>
                                 {% if off.clone %}
-                                <a href="/c/{{ off.clone.pseo_category_slug }}" target="_blank" class="text-sky-400 hover:underline font-semibold">Ver Página ↗</a>
+                                <a href="/c/{{ off.clone.pseo_category_slug }}" target="_blank" class="text-sky-400 hover:underline font-semibold text-xs">Ver ↗</a>
                                 {% endif %}
-                                <a href="/go/{{ off.short_code }}" target="_blank" class="font-mono text-orange-300 hover:underline">/go/{{ off.short_code }} ↗</a>
+                                <a href="/go/{{ off.short_code }}" target="_blank" class="font-mono text-orange-300 hover:underline text-xs">/go/{{ off.short_code }} ↗</a>
                             </td>
                         </tr>
                         {% endfor %}

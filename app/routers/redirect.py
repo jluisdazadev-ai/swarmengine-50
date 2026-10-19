@@ -102,6 +102,48 @@ async def _resolve_short_code(
     return (offer.id, offer.clone_id, offer.affiliate_full_url)
 
 
+BOT_USER_AGENT_KEYWORDS = (
+    "bot",
+    "crawl",
+    "spider",
+    "slurp",
+    "facebookexternalhit",
+    "headless",
+    "ahrefs",
+    "semrush",
+    "uptime",
+    "google",
+    "bing",
+    "yandex",
+    "baidu",
+    "python",
+    "curl",
+    "wget",
+    "httpclient",
+    "petalbot",
+    "dotbot",
+    "feedly",
+    "mediapartners",
+)
+
+
+def is_bot_or_crawler(user_agent: str) -> bool:
+    """Detecta si el User-Agent corresponde a un crawler, bot de búsqueda o script automatizado."""
+    if not user_agent or len(user_agent.strip()) < 10:
+        return True
+    ua = user_agent.lower()
+    return any(k in ua for k in BOT_USER_AGENT_KEYWORDS)
+
+
+def is_browser_prefetch(request: Request) -> bool:
+    """Detecta si la petición es una precarga silenciosa en segundo plano del navegador."""
+    for header in ("sec-purpose", "purpose", "x-moz", "x-purpose"):
+        val = request.headers.get(header, "").lower()
+        if "prefetch" in val or "prerender" in val:
+            return True
+    return False
+
+
 @router.get("/go/{short_code}", response_class=RedirectResponse, status_code=302)
 async def redirect_affiliate_offer(
     short_code: str,
@@ -112,8 +154,9 @@ async def redirect_affiliate_offer(
     """
     Endpoint de alta velocidad `/go/{short_code}`:
     1. Busca la oferta en caché Redis o PostgreSQL.
-    2. Encola en segundo plano el registro en `ClickEvent` y la suma `+1` en `DailyCloneMetrics.total_clicks`.
-    3. Devuelve `RedirectResponse(status_code=302)` con `Cache-Control: no-store`.
+    2. Descarta prefetchs del navegador y rastreadores web (Googlebot, etc.) para que SOLO cuenten clics humanos reales.
+    3. Aplica deduplicación de 5 minutos por IP y oferta para evitar clics inflados.
+    4. Redirige inmediatamente con 302 hacia el enlace oficial de afiliado.
     """
     clean_code = short_code.strip()
     resolved = await _resolve_short_code(clean_code, session)
@@ -121,6 +164,23 @@ async def redirect_affiliate_offer(
         raise HTTPException(status_code=404, detail="Oferta no encontrada o enlace expirado.")
 
     offer_id, clone_id, affiliate_full_url = resolved
+
+    headers = {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+        "X-Robots-Tag": "noindex, nofollow",
+    }
+
+    # 1. Ignorar silenciosamente precargas automáticas del navegador
+    if is_browser_prefetch(request):
+        return RedirectResponse(url=affiliate_full_url, status_code=302, headers=headers)
+
+    user_agent = request.headers.get("user-agent", "")
+
+    # 2. Ignorar rastreadores de búsqueda y bots (no son compradores)
+    if is_bot_or_crawler(user_agent):
+        return RedirectResponse(url=affiliate_full_url, status_code=302, headers=headers)
 
     forwarded_for = request.headers.get("x-forwarded-for")
     if forwarded_for:
@@ -131,24 +191,26 @@ async def redirect_affiliate_offer(
         client_ip = "0.0.0.0"
 
     visitor_ip_hash = hash_visitor_ip(client_ip)
-    user_agent = request.headers.get("user-agent", "")
     referer = request.headers.get("referer", "")
 
-    background_tasks.add_task(
-        _record_click_telemetry,
-        offer_id=offer_id,
-        clone_id=clone_id,
-        visitor_ip_hash=visitor_ip_hash,
-        user_agent=user_agent,
-        referer=referer,
-    )
+    # 3. Deduplicación por IP y oferta durante 5 minutos para evitar clics repetidos
+    cooldown_key = f"swarm:cooldown:click:{visitor_ip_hash}:{offer_id}"
+    is_duplicate = False
+    try:
+        is_duplicate = not bool(await redis_client.set(cooldown_key, "1", nx=True, ex=300))
+    except Exception:
+        is_duplicate = False
 
-    headers = {
-        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-        "Pragma": "no-cache",
-        "Expires": "0",
-        "X-Robots-Tag": "noindex, nofollow",
-    }
+    if not is_duplicate:
+        background_tasks.add_task(
+            _record_click_telemetry,
+            offer_id=offer_id,
+            clone_id=clone_id,
+            visitor_ip_hash=visitor_ip_hash,
+            user_agent=user_agent,
+            referer=referer,
+        )
+
     return RedirectResponse(
         url=affiliate_full_url,
         status_code=302,
